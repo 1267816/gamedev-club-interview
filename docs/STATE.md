@@ -22,6 +22,8 @@
 - 设置 `#settings`:音乐 / 音效音量滑杆。[ 退出 ] 进 `#quit`(会话已终止兜底画面)。
 - 存档:localStorage,键名 `vn-01-save`,存 { v, savedAt, active, material, probes, timeSec, importantLog, logHistory }。
   运行中每 3 秒自动存一次;`active` 决定刷新后是**自动续玩**还是停在封面。
+- 刷新 vs 重开:用 `sessionStorage` 区分——**F5 刷新接着玩**;**×关闭后再打开停在封面**。
+- 字体:ASCII 用 Consolas,中文用**黑体(SimHei)**;未内嵌任何字体文件(见 `docs/research.md` 第 7 节)。
 - 时间只在游戏运行时流动;停在封面时不计时。
 
 ## 已锁定的设计决策

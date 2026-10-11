@@ -19,8 +19,8 @@ html, body { height: 100%; margin: 0; }
 body {
   background: var(--bg);
   color: var(--fg);
-  /* 等宽字体:ASCII 用 Consolas,中文回退到新宋体(和你 Dev-C++ 里的习惯一致) */
-  font-family: Consolas, "NSimSun", "新宋体", monospace;
+  /* 等宽字体:ASCII 用 Consolas,中文用黑体(SimHei) */
+  font-family: Consolas, "SimHei", "黑体", monospace;
   font-size: 15px;
   line-height: 1.6;
   overflow: hidden;

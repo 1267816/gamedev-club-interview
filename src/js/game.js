@@ -645,7 +645,7 @@ function refreshCover() {
   document.getElementById('btn-load').disabled = !readSave();
 }
 
-// 离开页面时(刷新 / 关闭)顺手存一次,刷新后可以接着玩;不再弹确认框
+// 离开页面时(刷新 / 关闭)顺手存一次;不再弹确认框
 window.addEventListener('beforeunload', function () {
   if (running) writeSave(snapshot());
 });
@@ -653,15 +653,27 @@ document.addEventListener('visibilitychange', function () {
   if (document.hidden && running) writeSave(snapshot());
 });
 
+/* ---------- 这次是「刷新」还是「重新打开」? ---------- */
+// sessionStorage 在刷新时保留、关闭标签页后清空 —— 用它把 F5 和 ×关闭区分开:
+//   F5 刷新        → 接着玩(整屏内容原样接上)
+//   ×关闭后再打开  → 停在封面(要自己点「加载存档」,才能看到「以前的信息」)
+const ALIVE_KEY = 'vn-01-alive';
+let isReload = true;   // 兜底:万一 sessionStorage 不可用,退回"总是续玩"
+try {
+  isReload = sessionStorage.getItem(ALIVE_KEY) === '1';
+  sessionStorage.setItem(ALIVE_KEY, '1');
+} catch (e) { /* 忽略:保留上面的默认值 */ }
+
 setInputEnabled(false);   // 先锁住输入行,进游戏后再打开
 readSettings();
 bindCover();
 
-// 上次若是在游戏中(刷新 / 意外关闭),直接续玩;否则显示封面
 const savedSession = readSave();
-if (savedSession && savedSession.active) {
-  resumeSession(savedSession);
+if (isReload && savedSession && savedSession.active) {
+  resumeSession(savedSession);            // 刷新:把整屏内容原样接上
 } else {
+  // 不是刷新(比如关掉窗口再打开):停在封面,并标记为"未在游戏中"
+  if (savedSession) { savedSession.active = false; writeSave(savedSession); }
   showCover();
 }
 
