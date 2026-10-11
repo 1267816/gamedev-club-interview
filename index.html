@@ -62,12 +62,15 @@
 
     <!-- 底部:命令提示行 + 可点击的命令 -->
     <footer id="prompt">
-      <div id="ps1"><span>&gt;</span> <span id="caret"></span></div>
+      <div id="ps1"><span>&gt;</span><input id="cmd-input" type="text" autocomplete="off" spellcheck="false"></div>
       <div id="hint"></div>
       <div id="commands"></div>
     </footer>
 
   </div>
+
+  <!-- 命令面板:跟随鼠标光标右下角出现 -->
+  <div id="palette" class="hidden"></div>
 
   <script src="src/js/game-data.js"></script>
   <script src="src/js/game.js"></script>

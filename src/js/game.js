@@ -12,6 +12,7 @@ const game = {
   probes:   1,          // 探测器数量
   timeSec:  0,          // 游戏内经过的秒数
   lastTick: Date.now(), // 上一次推进的真实时刻
+  importantLog: [],     // 重要消息(剧情 / 系统提示),存档时一并保存
 };
 
 // 游戏是否在运行:封面、未开始时不流动
@@ -38,11 +39,29 @@ const queue = [];
 let busy  = false;   // 是否正在打某一行
 let skip  = false;   // 玩家点击后,当前行立刻显示完
 let activeTimer = null;   // 当前正在打字的那一行的定时器
+let lastLine = null;      // 最近一行:{ el, base, count, group } —— 用于重复操作折叠
 
-// opts: { cls, instant, revealAll }
+// opts: { cls, instant, revealAll, group, important }
 function log(text, opts) {
   opts = opts || {};
-  queue.push({ text: text, cls: opts.cls, instant: opts.instant, revealAll: opts.revealAll });
+
+  // 重复操作折叠:与上一行同组时,不再新增行,只把计数 +1
+  if (opts.group && lastLine && lastLine.group === opts.group
+      && lastLine.el === logEl.lastElementChild) {
+    lastLine.count += 1;
+    lastLine.el.textContent = lastLine.base + ' ×' + lastLine.count;
+    logEl.scrollTop = logEl.scrollHeight;
+    return;
+  }
+
+  queue.push({
+    text: text,
+    cls: opts.cls,
+    instant: opts.instant,
+    revealAll: opts.revealAll,
+    group: opts.group,
+    important: opts.important,
+  });
   pump();
 }
 
@@ -60,6 +79,10 @@ function pump() {
   const masked = !charsOnline && !item.revealAll;
   const shown  = masked ? '?'.repeat(Array.from(item.text).length) : item.text;
   if (masked) maskedLines.push({ el: line, text: item.text });
+
+  // 记下"最近一行",供重复操作折叠使用;重要消息则归档
+  lastLine = item.group ? { el: line, base: item.text, count: 1, group: item.group } : null;
+  if (item.important) game.importantLog.push({ text: item.text, cls: item.cls || '' });
 
   // 高频短行(比如手动的 +1)用 instant,不排队打字,免得刷屏卡住
   if (item.instant) {
@@ -126,6 +149,15 @@ const hintEl     = document.getElementById('hint');
 // 命令提示行:悬停 / 聚焦某个命令时,在按钮上方显示它的说明
 function setHint(text) { hintEl.textContent = text || ''; }
 
+// 侧栏读数面板:悬停每一行时,也在提示行显示它的说明(数据在 game-data.js 的 panelHints)
+readoutEl.addEventListener('mouseover', function (e) {
+  const t = e.target.closest('[data-hint]');
+  if (t) setHint(t.getAttribute('data-hint'));
+});
+readoutEl.addEventListener('mouseout', function (e) {
+  if (e.target.closest('[data-hint]')) setHint('');
+});
+
 function two(n) { return String(n).padStart(2, '0'); }
 function fmtTime(sec) {
   const t = Math.floor(sec);
@@ -143,10 +175,10 @@ function render() {
   const bar    = '█'.repeat(filled) + '░'.repeat(12 - filled);
 
   readoutEl.innerHTML =
-      '<div class="row"><span>' + T('材料') + '</span><b>' + T(String(Math.floor(game.material))) + '</b></div>'
-    + '<div class="bar">' + T(bar) + '</div>'
-    + '<div class="row"><span>' + T('探测器') + '</span><b>' + T(game.probes + ' 台') + '</b></div>'
-    + '<div class="row"><span>' + T('产出') + '</span><b>' + T(perSecond().toFixed(1) + ' /秒') + '</b></div>';
+      '<div class="row" data-hint="' + D.panelHints.material + '"><span>' + T('材料') + '</span><b>' + T(String(Math.floor(game.material))) + '</b></div>'
+    + '<div class="bar" data-hint="' + D.panelHints.progress + '">' + T(bar) + '</div>'
+    + '<div class="row" data-hint="' + D.panelHints.probes + '"><span>' + T('探测器') + '</span><b>' + T(game.probes + ' 台') + '</b></div>'
+    + '<div class="row" data-hint="' + D.panelHints.output + '"><span>' + T('产出') + '</span><b>' + T(perSecond().toFixed(1) + ' /秒') + '</b></div>';
 
   // 命令按钮的可用状态
   for (const c of D.commands) {
@@ -161,6 +193,7 @@ function render() {
 function buildCommands() {
   cmdEl.innerHTML = '';   // 清掉旧按钮(新档/读档切换时避免重复)
   for (const c of D.commands) {
+    if (c.clickable === false) continue;   // 未解锁点击的命令先不出现(以后由科技树开启)
     const btn = document.createElement('button');
     btn.id = 'btn-' + c.id;
     btn.textContent = '[ ' + c.label + ' ]';
@@ -172,26 +205,115 @@ function buildCommands() {
     btn.onblur       = function () { setHint(''); };
     cmdEl.appendChild(btn);
   }
+  setInputEnabled(true);
   render();
 }
+
+/* ---------- 命令行:输入 + 命令面板 + Tab 补全 ---------- */
+const cmdInput  = document.getElementById('cmd-input');
+const paletteEl = document.getElementById('palette');
+let mouseX = 0, mouseY = 0;
+
+document.addEventListener('mousemove', function (e) {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+});
+
+// 启用 / 停用输入行(启动序列与封面期间停用)
+function setInputEnabled(on) {
+  cmdInput.disabled = !on;
+  if (on) {
+    const r = cmdInput.getBoundingClientRect();
+    if (!mouseX && !mouseY) { mouseX = r.right; mouseY = r.bottom; }
+    cmdInput.focus();
+  } else {
+    cmdInput.value = '';
+    hidePalette();
+  }
+}
+
+// 前缀匹配 + 字母序
+function matchCommands(prefix) {
+  const p = prefix.trim().toLowerCase();
+  return D.commands
+    .filter(function (c) { return c.label.toLowerCase().indexOf(p) === 0; })
+    .sort(function (a, b) { return a.label < b.label ? -1 : 1; });
+}
+
+// 命令面板:出现在鼠标光标右下角
+function showPalette() {
+  const matches = matchCommands(cmdInput.value);
+  if (!cmdInput.value.trim() || matches.length === 0) { hidePalette(); return; }
+
+  paletteEl.innerHTML = '';
+  matches.forEach(function (c, i) {
+    const item = document.createElement('div');
+    item.className = 'palette-item' + (i === 0 ? ' active' : '');
+    item.textContent = c.label + '  —  ' + (c.hint || '');
+    item.onmousedown = function (e) {   // 用 mousedown:别让输入框先失焦
+      e.preventDefault();
+      cmdInput.value = '';
+      hidePalette();
+      runCommand(c.id);
+      cmdInput.focus();
+    };
+    paletteEl.appendChild(item);
+  });
+
+  paletteEl.classList.remove('hidden');
+  paletteEl.style.left = (mouseX + 8) + 'px';
+  paletteEl.style.top  = (mouseY + 8) + 'px';
+}
+
+function hidePalette() {
+  paletteEl.classList.add('hidden');
+  paletteEl.innerHTML = '';
+}
+
+// 回车:执行输入的命令
+function runTyped() {
+  const text = cmdInput.value.trim().toLowerCase();
+  hidePalette();
+  if (!text) return;
+  const cmd = D.commands.find(function (c) { return c.label.toLowerCase() === text; });
+  if (cmd) {
+    cmdInput.value = '';
+    runCommand(cmd.id);
+  } else {
+    log('未知命令:' + text, { cls: 'err', instant: true });
+  }
+}
+
+cmdInput.addEventListener('input', showPalette);
+
+cmdInput.addEventListener('keydown', function (e) {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const matches = matchCommands(cmdInput.value);
+    if (matches.length) cmdInput.value = matches[0].label;   // Tab 补全到第一项
+    showPalette();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    runTyped();
+  } else if (e.key === 'Escape') {
+    hidePalette();
+  }
+});
 
 /* ---------- 响应命令 ---------- */
 function runCommand(id) {
   if (id === 'mine') {
     game.material += D.numbers.manualMine;
-    log('+1 材料', { cls: 'dim', instant: true });   // instant:高频短行,不打字
+    log('+1 材料', { cls: 'dim', instant: true, group: 'mine' });
 
   } else if (id === 'replicate') {
     const cost = D.numbers.replicateCost;
     if (game.material < cost) {
-      log('> replicate', { cls: 'cmd' });
-      log('  材料不足:需要 ' + cost + '。', { cls: 'err' });
+      log('材料不足:需要 ' + cost + ' 材料。', { cls: 'err', instant: true });
     } else {
-      const before = game.probes;
       game.material -= cost;
       game.probes  += 1;
-      log('> replicate', { cls: 'cmd' });
-      log('  探测器 ' + before + ' → ' + game.probes, { cls: 'ok' });
+      log('> replicate  探测器 ' + game.probes, { cls: 'ok', instant: true, group: 'replicate' });
     }
 
   } else if (id === 'save') {
@@ -213,23 +335,27 @@ function readSave() {
   try { return JSON.parse(raw); } catch (e) { return null; }
 }
 
-function saveGame() {
+function saveGame(silent) {
   const data = {
     v: D.version,
     savedAt: Date.now(),
     material: game.material,
     probes:   game.probes,
     timeSec:  game.timeSec,
+    importantLog: game.importantLog,
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-  log('> save', { cls: 'cmd' });
-  log('  进度已保存。T+' + fmtTime(game.timeSec), { cls: 'ok' });
+  if (!silent) {
+    log('> save', { cls: 'cmd' });
+    log('  进度已保存。T+' + fmtTime(game.timeSec), { cls: 'ok' });
+  }
 }
 
 function applySave(d) {
   game.material = Number(d.material) || 0;
   game.probes   = Number(d.probes)   || 1;
   game.timeSec  = Number(d.timeSec)  || 0;
+  game.importantLog = Array.isArray(d.importantLog) ? d.importantLog : [];
   game.lastTick = Date.now();
 }
 
@@ -255,10 +381,13 @@ function showScreen(name) {
 /* ---------- 启动流程 ---------- */
 function boot() {
   render();   // 先把顶栏/侧栏画成问号状态
+  setInputEnabled(false);   // 启动序列期间不接受输入
 
   // 依次打出启动日志(条目是对象:{ text, revealAll })
   D.bootLog.forEach(function (entry, i) {
-    setTimeout(function () { log(entry.text, entry); }, i * 320);
+    setTimeout(function () {
+      log(entry.text, { revealAll: entry.revealAll, important: true });
+    }, i * 320);
   });
 
   // "等待输入。"打完后,命令按钮才出现
@@ -269,6 +398,7 @@ function resetGame() {
   game.material = 0;
   game.probes   = 1;
   game.timeSec  = 0;
+  game.importantLog = [];
   game.lastTick = Date.now();
 }
 
@@ -277,6 +407,7 @@ function startNew() {
   clearLog();
   charsOnline = false;   // 新档:重新经历一次"字符解析系统上线"
   running = true;
+  setInputEnabled(false);   // 启动序列期间不能输入
   showScreen('game');
   boot();
 }
@@ -287,16 +418,47 @@ function startLoaded(d) {
   charsOnline = true;    // 读档:解析器早已上线,直接可读
   running = true;
   showScreen('game');
+
+  // 先把"以前的信息"折叠行放出来(在"存档已载入"之前)
+  const archived = game.importantLog.slice();
+  if (archived.length) addArchivedEntry(archived);
+
   render();
   log('存档已载入。', { cls: 'ok' });
   log('  从 T+' + fmtTime(game.timeSec) + ' 继续。', { cls: 'dim' });
   buildCommands();
 }
 
+/* ---------- 「以前的信息」:折叠展示退出前的重要消息 ---------- */
+function addArchivedEntry(archived) {
+  let index = 0;
+  const entry = document.createElement('div');
+  entry.className = 'line archived';
+  entry.textContent = '▽ 以前的信息 (点击展开)';
+
+  entry.onclick = function () {
+    const page = archived.slice(index, index + D.archivePageSize);
+    index += page.length;
+    for (const m of page) {
+      const el = document.createElement('div');
+      el.className = 'line' + (m.cls ? ' ' + m.cls : '');
+      el.textContent = m.text;
+      logEl.insertBefore(el, entry);   // 展开的内容插在折叠行上方
+    }
+    if (index >= archived.length) entry.remove();   // 全部展开后,折叠行消失
+    logEl.scrollTop = logEl.scrollHeight;
+  };
+
+  logEl.appendChild(entry);
+  lastLine = null;   // 折叠行不算「最近一行」
+}
+
 /* ---------- 返回封面 / 退出 ---------- */
 function exitToCover() {
+  saveGame(true);   // 退出前自动保存(含重要消息),下次可从封面读档
   running = false;
   clearLog();
+  setInputEnabled(false);
   showScreen('cover');
   refreshCover();
 }
@@ -404,6 +566,14 @@ function refreshCover() {
   document.getElementById('btn-load').disabled = !readSave();
 }
 
+// 运行中刷新 / 关闭页面时提醒一下,避免被当成「退出」而丢掉进度
+window.addEventListener('beforeunload', function (e) {
+  if (!running) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
+setInputEnabled(false);   // 先锁住输入行,进游戏后再打开
 readSettings();
 initCover();
 setInterval(tick, 100);   // 每 0.1 秒推进一次;具体加多少由真实时间决定

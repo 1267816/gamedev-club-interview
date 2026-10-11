@@ -92,21 +92,24 @@ body::after {
   to   { background: transparent; }
 }
 
-#ps1 { margin-bottom: 6px; }
+#ps1 { margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+#cmd-input {
+  flex: 1;
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  outline: none;
+  caret-color: var(--fg);
+  text-shadow: inherit;
+}
+#cmd-input:disabled { color: var(--dim); }
 #hint {
   color: var(--dim);
   min-height: 3.2em;   /* 预留两行:避免悬停时布局跳动,也给更长的说明留空间 */
   line-height: 1.6em;
   margin-bottom: 6px;
 }
-#caret {
-  display: inline-block;
-  width: .6em; height: 1.1em;
-  background: var(--fg);
-  vertical-align: -2px;
-  animation: blink 1s steps(1) infinite;
-}
-@keyframes blink { 50% { opacity: 0; } }
 
 #commands { display: flex; gap: 10px; flex-wrap: wrap; }
 #commands button {
@@ -214,3 +217,29 @@ body::after {
 }
 
 .setting-row b { text-align: right; }
+
+/* ---------- 命令面板(跟随鼠标光标右下角) ---------- */
+#palette {
+  position: fixed;
+  z-index: 50;
+  min-width: 220px;
+  max-width: 400px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  padding: 4px 0;
+}
+
+.palette-item {
+  padding: 4px 10px;
+  color: var(--fg);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.palette-item.active,
+.palette-item:hover { background: rgba(142, 255, 168, .14); }
+
+/* ---------- 可点击的「以前的信息」折叠行 ---------- */
+.archived { color: var(--accent); cursor: pointer; }
+.archived:hover { text-decoration: underline; }

@@ -24,9 +24,12 @@ src/js/game-data.js   数据表:文字 / 数值 / 命令 / 设置项
 src/js/game.js        逻辑:状态 / 推进 / 渲染 / 命令 / 存档 / 界面
 assets/audio/         音频素材(尚未使用)
 assets/images/        图片素材(尚未使用)
-plan.md               需求与每轮迭代记录(按时序正序)
-test_datalog.md       测试点与测试结果(按时序正序)
-STATE.md              当前进度(给新会话读的「记忆」)
+docs/plan.md          需求与每轮迭代记录(按时序正序)
+docs/test_datalog.md  测试点与测试结果(按时序正序)
+docs/research.md      研究记录(按时序正序)
+docs/STATE.md         当前进度(给新会话读的「记忆」)
+AGENTS.md             本文件(留在根目录:AI 工具约定会在这里找它)
+README.md             给面试官看的说明
 ```
 
 ## 工作方式(重要)
@@ -46,3 +49,4 @@ STATE.md              当前进度(给新会话读的「记忆」)
 2. 每次更新输出时,都要列出本次需要测试的测试点。
 3. `plan.md` 与 `test_datalog.md` 的迭代内容一律**按时序正序**排列。
 4. 保持清晰合适的项目架构:文件分类进 `src/` 与 `assets/`,路径改动要同步更新引用。
+5. 除 `README.md` 外,md 文件统一放 `docs/`(`AGENTS.md` 例外——它是工具约定文件,留在根目录)。
