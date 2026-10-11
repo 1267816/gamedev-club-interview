@@ -8,7 +8,7 @@ const GAME_DATA = {
   title: "VN-CommandLineSystem 自复制探测器命令行系统",
 
   // 游戏版本号(与 plan.md / test_datalog.md 的版本保持一致)
-  version: "V0.0.3",
+  version: "V0.0.4",
 
   // 数值:全部集中在这里,方便"一次只调一样"
   numbers: {
@@ -53,5 +53,16 @@ const GAME_DATA = {
       label: "save",
       hint:  "保存当前进度",
     },
+    {
+      id:    "exit",
+      label: "exit",
+      hint:  "返回封面(未保存的进度会丢失)",
+    },
+  ],
+
+  // 设置项(音量)。以后要加新的音频开关,在这里加一行即可。
+  settings: [
+    { id: "music", label: "音乐音量" },
+    { id: "sfx",   label: "音效音量" },
   ],
 };

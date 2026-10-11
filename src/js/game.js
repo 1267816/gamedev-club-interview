@@ -196,6 +196,10 @@ function runCommand(id) {
 
   } else if (id === 'save') {
     saveGame();
+
+  } else if (id === 'exit') {
+    exitToCover();
+    return;   // 已切回封面,不必再渲染游戏界面
   }
   render();
 }
@@ -240,9 +244,12 @@ function clearLog() {
 }
 
 /* ---------- 界面切换 ---------- */
+// name: 'cover' | 'game' | 'settings' | 'quit'
 function showScreen(name) {
-  document.getElementById('cover').classList.toggle('hidden', name !== 'cover');
-  document.getElementById('screen').classList.toggle('hidden', name !== 'game');
+  const map = { cover: 'cover', game: 'screen', settings: 'settings', quit: 'quit' };
+  for (const key in map) {
+    document.getElementById(map[key]).classList.toggle('hidden', name !== key);
+  }
 }
 
 /* ---------- 启动流程 ---------- */
@@ -286,20 +293,117 @@ function startLoaded(d) {
   buildCommands();
 }
 
+/* ---------- 返回封面 / 退出 ---------- */
+function exitToCover() {
+  running = false;
+  clearLog();
+  showScreen('cover');
+  refreshCover();
+}
+
+function quitGame() {
+  showScreen('quit');
+  // 浏览器一般只允许脚本关闭"由脚本打开的"窗口;从本地双击打开时多半会被拦下,
+  // 所以先显示"会话已终止"画面,再尝试关闭窗口。
+  try { window.close(); } catch (e) { /* 忽略 */ }
+}
+
+/* ---------- 设置:音乐 / 音效音量 ---------- */
+const SETTINGS_KEY = 'vn-01-settings';
+const audioSettings = { music: 0.5, sfx: 0.5 };   // 取值 0 ~ 1
+
+function readSettings() {
+  const raw = localStorage.getItem(SETTINGS_KEY);
+  if (!raw) return;
+  try {
+    const d = JSON.parse(raw);
+    if (typeof d.music === 'number') audioSettings.music = d.music;
+    if (typeof d.sfx   === 'number') audioSettings.sfx   = d.sfx;
+  } catch (e) { /* 设置损坏就忽略 */ }
+}
+
+function writeSettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(audioSettings));
+}
+
+// 音频接口:现在只记录音量,尚未加载音频素材。
+// 以后接真实音频时,把 TODO 换成操作 <audio> / WebAudio 即可,调用方不用改。
+const AudioSystem = {
+  setMusicVolume: function (v) { audioSettings.music = v; writeSettings(); /* TODO */ },
+  setSfxVolume:   function (v) { audioSettings.sfx   = v; writeSettings(); /* TODO */ },
+  playSfx:  function (name) { /* TODO: 播放音效 name */ },
+  playMusic: function (name) { /* TODO: 播放音乐 name */ },
+};
+
+// 设置项 id → 音频通道(设置项表在 game-data.js 的 settings)
+const SETTING_APPLY = {
+  music: function (v) { AudioSystem.setMusicVolume(v); },
+  sfx:   function (v) { AudioSystem.setSfxVolume(v); },
+};
+
+function buildSettings() {
+  const list = document.getElementById('settings-list');
+  list.innerHTML = '';
+  for (const s of D.settings) {
+    const row   = document.createElement('div');
+    const label = document.createElement('span');
+    const input = document.createElement('input');
+    const val   = document.createElement('b');
+
+    row.className = 'setting-row';
+    label.textContent = s.label;
+
+    input.type = 'range';
+    input.min = 0;
+    input.max = 100;
+    input.step = 1;
+    input.value = Math.round(audioSettings[s.id] * 100);
+
+    val.textContent = input.value + '%';
+
+    input.oninput = function () {
+      val.textContent = input.value + '%';
+      if (SETTING_APPLY[s.id]) SETTING_APPLY[s.id](Number(input.value) / 100);
+    };
+
+    row.appendChild(label);
+    row.appendChild(input);
+    row.appendChild(val);
+    list.appendChild(row);
+  }
+}
+
+function openSettings() {
+  buildSettings();
+  showScreen('settings');
+}
+
 /* ---------- 封面 ---------- */
 function initCover() {
   showScreen('cover');
   running = false;
-  document.getElementById('cover-version').textContent = '版本 ' + D.version;
 
-  const btnLoad = document.getElementById('btn-load');
-  btnLoad.disabled = !readSave();          // 没有存档时不能读
-  btnLoad.onclick = function () {
+  document.getElementById('btn-new').onclick = startNew;
+  document.getElementById('btn-load').onclick = function () {
     const d = readSave();
     if (d) startLoaded(d);
   };
-  document.getElementById('btn-new').onclick = startNew;
+  document.getElementById('btn-settings').onclick = openSettings;
+  document.getElementById('btn-quit').onclick = quitGame;
+  document.getElementById('btn-settings-back').onclick = function () {
+    showScreen('cover');
+    refreshCover();
+  };
+
+  refreshCover();
 }
 
+// 刷新封面上的动态部分(版本号、是否可读存档)
+function refreshCover() {
+  document.getElementById('cover-version').textContent = '版本 ' + D.version;
+  document.getElementById('btn-load').disabled = !readSave();
+}
+
+readSettings();
 initCover();
 setInterval(tick, 100);   // 每 0.1 秒推进一次;具体加多少由真实时间决定

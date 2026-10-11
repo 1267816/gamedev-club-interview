@@ -95,7 +95,8 @@ body::after {
 #ps1 { margin-bottom: 6px; }
 #hint {
   color: var(--dim);
-  min-height: 1.6em;   /* 占位,避免悬停时布局跳动 */
+  min-height: 3.2em;   /* 预留两行:避免悬停时布局跳动,也给更长的说明留空间 */
+  line-height: 1.6em;
   margin-bottom: 6px;
 }
 #caret {
@@ -155,10 +156,12 @@ body::after {
   display: flex;
   gap: 14px;
   justify-content: center;
+  flex-wrap: wrap;
   margin-bottom: 44px;
 }
 
-.cover-menu button {
+.cover-menu button,
+.panel-menu button {
   font: inherit;
   color: var(--fg);
   background: transparent;
@@ -167,11 +170,47 @@ body::after {
   cursor: pointer;
   text-shadow: inherit;
 }
-.cover-menu button:hover { border-color: var(--fg); }
-.cover-menu button:disabled {
+.cover-menu button:hover,
+.panel-menu button:hover { border-color: var(--fg); }
+.cover-menu button:disabled,
+.panel-menu button:disabled {
   color: var(--dim);
   cursor: not-allowed;
   text-shadow: none;
 }
 
 .cover-version { color: var(--dim); font-size: 13px; }
+
+/* ---------- 设置 / 退出等面板 ---------- */
+#settings, #quit {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panel {
+  min-width: 360px;
+  border: 1px solid var(--line);
+  padding: 22px 26px;
+}
+
+.panel-title { font-size: 18px; margin-bottom: 18px; }
+.panel-note  { color: var(--dim); font-size: 13px; margin-top: 16px; }
+.panel-menu  { margin-top: 20px; display: flex; gap: 12px; }
+
+.setting-row {
+  display: grid;
+  grid-template-columns: 96px 1fr 56px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.setting-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--fg);
+  background: transparent;
+}
+
+.setting-row b { text-align: right; }
