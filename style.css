@@ -119,3 +119,52 @@ body::after {
 
 .row { display: flex; justify-content: space-between; margin-bottom: 6px; }
 .bar { letter-spacing: 1px; margin: 2px 0 10px; }
+
+/* 界面切换:隐藏 */
+.hidden { display: none !important; }
+
+/* ---------- 封面 ---------- */
+#cover {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cover-box { text-align: center; }
+
+.cover-title {
+  font-size: 44px;
+  letter-spacing: 6px;
+  margin-bottom: 6px;
+}
+
+.cover-sub {
+  color: var(--dim);
+  margin-bottom: 36px;
+}
+
+.cover-menu {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  margin-bottom: 44px;
+}
+
+.cover-menu button {
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 8px 18px;
+  cursor: pointer;
+  text-shadow: inherit;
+}
+.cover-menu button:hover { border-color: var(--fg); }
+.cover-menu button:disabled {
+  color: var(--dim);
+  cursor: not-allowed;
+  text-shadow: none;
+}
+
+.cover-version { color: var(--dim); font-size: 13px; }

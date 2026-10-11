@@ -14,6 +14,9 @@ const game = {
   lastTick: Date.now(), // 上一次推进的真实时刻
 };
 
+// 游戏是否在运行:封面、未开始时不流动
+let running = false;
+
 // 由状态"算出来"的值,不存起来,每次现算,避免前后不一致
 function perSecond() {
   return game.probes * D.numbers.probeOutput;
@@ -34,6 +37,7 @@ const logEl = document.getElementById('log');
 const queue = [];
 let busy  = false;   // 是否正在打某一行
 let skip  = false;   // 玩家点击后,当前行立刻显示完
+let activeTimer = null;   // 当前正在打字的那一行的定时器
 
 // opts: { cls, instant, revealAll }
 function log(text, opts) {
@@ -69,12 +73,13 @@ function pump() {
 
   const chars = Array.from(shown);   // Array.from 兼容中文与代理对
   let i = 0;
-  const timer = setInterval(function () {
+  activeTimer = setInterval(function () {
     if (skip) i = chars.length; else i++;
     line.textContent = chars.slice(0, i).join('');
     logEl.scrollTop = logEl.scrollHeight;
     if (i >= chars.length) {
-      clearInterval(timer);
+      clearInterval(activeTimer);
+      activeTimer = null;
       finishLine(item);
       busy = false;
       pump();
@@ -105,6 +110,7 @@ function tick() {
   const now = Date.now();
   const dt  = Math.min((now - game.lastTick) / 1000, 5); // 一次最多补 5 秒
   game.lastTick = now;
+  if (!running) return;          // 封面 / 未开始时,时间不流动
   game.timeSec += dt;
   game.material += perSecond() * dt;
   render();
@@ -117,14 +123,15 @@ const headerTime = document.getElementById('header-time');
 const headerTitle = document.getElementById('header-title');
 
 function two(n) { return String(n).padStart(2, '0'); }
+function fmtTime(sec) {
+  const t = Math.floor(sec);
+  return two(Math.floor(t / 3600)) + ':' + two(Math.floor(t / 60) % 60) + ':' + two(t % 60);
+}
 
 function render() {
   // 顶栏:标题 + 计时 T+时:分:秒(未上线时都是问号)
   headerTitle.textContent = T(D.title);
-  const t = Math.floor(game.timeSec);
-  headerTime.textContent = T(
-    'T+' + two(Math.floor(t / 3600)) + ':' + two(Math.floor(t / 60) % 60) + ':' + two(t % 60)
-  );
+  headerTime.textContent = T('T+' + fmtTime(game.timeSec));
 
   // 右侧读数:数字 + 朝向"下一次复制"的 ASCII 进度条
   const need   = D.numbers.replicateCost;
@@ -148,6 +155,7 @@ function render() {
 
 /* ---------- 建命令按钮(只建一次) ---------- */
 function buildCommands() {
+  cmdEl.innerHTML = '';   // 清掉旧按钮(新档/读档切换时避免重复)
   for (const c of D.commands) {
     const btn = document.createElement('button');
     btn.id = 'btn-' + c.id;
@@ -177,11 +185,58 @@ function runCommand(id) {
       log('> replicate', { cls: 'cmd' });
       log('  探测器 ' + before + ' → ' + game.probes, { cls: 'ok' });
     }
+
+  } else if (id === 'save') {
+    saveGame();
   }
   render();
 }
 
-/* ---------- 启动 ---------- */
+/* ---------- 存档:localStorage ---------- */
+const SAVE_KEY = 'vn-01-save';
+
+function readSave() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch (e) { return null; }
+}
+
+function saveGame() {
+  const data = {
+    v: D.version,
+    savedAt: Date.now(),
+    material: game.material,
+    probes:   game.probes,
+    timeSec:  game.timeSec,
+  };
+  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  log('> save', { cls: 'cmd' });
+  log('  进度已保存。T+' + fmtTime(game.timeSec), { cls: 'ok' });
+}
+
+function applySave(d) {
+  game.material = Number(d.material) || 0;
+  game.probes   = Number(d.probes)   || 1;
+  game.timeSec  = Number(d.timeSec)  || 0;
+  game.lastTick = Date.now();
+}
+
+/* ---------- 清空日志(开新档 / 读档时用) ---------- */
+function clearLog() {
+  if (activeTimer) { clearInterval(activeTimer); activeTimer = null; }
+  queue.length = 0;
+  maskedLines.length = 0;
+  busy = false;
+  logEl.innerHTML = '';
+}
+
+/* ---------- 界面切换 ---------- */
+function showScreen(name) {
+  document.getElementById('cover').classList.toggle('hidden', name !== 'cover');
+  document.getElementById('screen').classList.toggle('hidden', name !== 'game');
+}
+
+/* ---------- 启动流程 ---------- */
 function boot() {
   render();   // 先把顶栏/侧栏画成问号状态
 
@@ -194,5 +249,48 @@ function boot() {
   setTimeout(buildCommands, D.bootLog.length * 320 + 200);
 }
 
-boot();
+function resetGame() {
+  game.material = 0;
+  game.probes   = 1;
+  game.timeSec  = 0;
+  game.lastTick = Date.now();
+}
+
+function startNew() {
+  resetGame();
+  clearLog();
+  charsOnline = false;   // 新档:重新经历一次"字符解析系统上线"
+  running = true;
+  showScreen('game');
+  boot();
+}
+
+function startLoaded(d) {
+  applySave(d);
+  clearLog();
+  charsOnline = true;    // 读档:解析器早已上线,直接可读
+  running = true;
+  showScreen('game');
+  render();
+  log('存档已载入。', { cls: 'ok' });
+  log('  从 T+' + fmtTime(game.timeSec) + ' 继续。', { cls: 'dim' });
+  buildCommands();
+}
+
+/* ---------- 封面 ---------- */
+function initCover() {
+  showScreen('cover');
+  running = false;
+  document.getElementById('cover-version').textContent = '版本 ' + D.version;
+
+  const btnLoad = document.getElementById('btn-load');
+  btnLoad.disabled = !readSave();          // 没有存档时不能读
+  btnLoad.onclick = function () {
+    const d = readSave();
+    if (d) startLoaded(d);
+  };
+  document.getElementById('btn-new').onclick = startNew;
+}
+
+initCover();
 setInterval(tick, 100);   // 每 0.1 秒推进一次;具体加多少由真实时间决定

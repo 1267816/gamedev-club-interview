@@ -7,7 +7,22 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="screen">
+
+  <!-- 封面:与游戏一致的终端风格。游戏标题 + 新游戏 / 加载存档 + 版本号 -->
+  <div id="cover">
+    <div class="cover-box">
+      <div class="cover-title">VN-01</div>
+      <div class="cover-sub">自复制探测器 · 命令行系统</div>
+      <div class="cover-menu">
+        <button id="btn-new">[ 新游戏 ]</button>
+        <button id="btn-load">[ 加载存档 ]</button>
+      </div>
+      <div class="cover-version" id="cover-version">版本 —</div>
+    </div>
+  </div>
+
+  <!-- 游戏主界面 -->
+  <div id="screen" class="hidden">
 
     <!-- 顶部:系统标题 + 运行计时 -->
     <header id="header">

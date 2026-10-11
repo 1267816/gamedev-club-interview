@@ -7,6 +7,9 @@ const GAME_DATA = {
   // 顶部标题栏显示的名字
   title: "VN-CommandLineSystem 自复制探测器命令行系统",
 
+  // 游戏版本号(与 plan.md / test_datalog.md 的版本保持一致)
+  version: "V0.0.2",
+
   // 数值:全部集中在这里,方便"一次只调一样"
   numbers: {
     manualMine:    1,     // 手动采集一次 +1 材料
@@ -44,6 +47,11 @@ const GAME_DATA = {
       label:        "replicate",
       hint:         "消耗 10 材料,复制一个探测器",
       costMaterial: 10,
+    },
+    {
+      id:    "save",
+      label: "save",
+      hint:  "保存当前进度",
     },
   ],
 };
