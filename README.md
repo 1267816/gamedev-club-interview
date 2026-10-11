@@ -18,4 +18,4 @@
 ## 开发说明
 
 - 协作约定见 [`AGENTS.md`](./AGENTS.md)
-- 当前进度与状态见 [`STATE.md`](./STATE.md)
+- 当前进度与状态见 [`docs/STATE.md`](./docs/STATE.md)

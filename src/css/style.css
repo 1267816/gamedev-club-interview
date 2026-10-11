@@ -218,15 +218,13 @@ body::after {
 
 .setting-row b { text-align: right; }
 
-/* ---------- 命令面板(跟随鼠标光标右下角) ---------- */
+/* ---------- 命令面板(紧贴输入行下方) ---------- */
 #palette {
-  position: fixed;
-  z-index: 50;
-  min-width: 220px;
-  max-width: 400px;
   border: 1px solid var(--line);
   background: var(--bg);
-  padding: 4px 0;
+  margin-bottom: 6px;
+  max-height: calc(1.6em * 3 + 10px);   /* 最多显示 3 行 */
+  overflow-y: auto;                     /* 超过 3 行可上下滚动 */
 }
 
 .palette-item {
@@ -234,8 +232,6 @@ body::after {
   color: var(--fg);
   cursor: pointer;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .palette-item.active,
 .palette-item:hover { background: rgba(142, 255, 168, .14); }

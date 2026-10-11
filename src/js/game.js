@@ -49,6 +49,7 @@ function log(text, opts) {
   if (opts.group && lastLine && lastLine.group === opts.group
       && lastLine.el === logEl.lastElementChild) {
     lastLine.count += 1;
+    lastLine.base = text;   // 用最新的数据,而不是第一次那条
     lastLine.el.textContent = lastLine.base + ' ×' + lastLine.count;
     logEl.scrollTop = logEl.scrollHeight;
     return;
@@ -212,19 +213,11 @@ function buildCommands() {
 /* ---------- 命令行:输入 + 命令面板 + Tab 补全 ---------- */
 const cmdInput  = document.getElementById('cmd-input');
 const paletteEl = document.getElementById('palette');
-let mouseX = 0, mouseY = 0;
-
-document.addEventListener('mousemove', function (e) {
-  mouseX = e.clientX;
-  mouseY = e.clientY;
-});
 
 // 启用 / 停用输入行(启动序列与封面期间停用)
 function setInputEnabled(on) {
   cmdInput.disabled = !on;
   if (on) {
-    const r = cmdInput.getBoundingClientRect();
-    if (!mouseX && !mouseY) { mouseX = r.right; mouseY = r.bottom; }
     cmdInput.focus();
   } else {
     cmdInput.value = '';
@@ -240,12 +233,22 @@ function matchCommands(prefix) {
     .sort(function (a, b) { return a.label < b.label ? -1 : 1; });
 }
 
-// 命令面板:出现在鼠标光标右下角
+// 命令面板:紧贴输入行下方
 function showPalette() {
   const matches = matchCommands(cmdInput.value);
-  if (!cmdInput.value.trim() || matches.length === 0) { hidePalette(); return; }
-
   paletteEl.innerHTML = '';
+
+  if (!cmdInput.value.trim()) { hidePalette(); return; }
+
+  if (matches.length === 0) {
+    const none = document.createElement('div');
+    none.className = 'palette-item dim';
+    none.textContent = '命令以 / 开头;输入 / 查看全部命令。';
+    paletteEl.appendChild(none);
+    paletteEl.classList.remove('hidden');
+    return;
+  }
+
   matches.forEach(function (c, i) {
     const item = document.createElement('div');
     item.className = 'palette-item' + (i === 0 ? ' active' : '');
@@ -261,8 +264,6 @@ function showPalette() {
   });
 
   paletteEl.classList.remove('hidden');
-  paletteEl.style.left = (mouseX + 8) + 'px';
-  paletteEl.style.top  = (mouseY + 8) + 'px';
 }
 
 function hidePalette() {
@@ -280,7 +281,7 @@ function runTyped() {
     cmdInput.value = '';
     runCommand(cmd.id);
   } else {
-    log('未知命令:' + text, { cls: 'err', instant: true });
+    log('未知命令:' + text + '(命令需以 / 开头,如 /mine)', { cls: 'err', instant: true });
   }
 }
 
@@ -313,7 +314,7 @@ function runCommand(id) {
     } else {
       game.material -= cost;
       game.probes  += 1;
-      log('> replicate  探测器 ' + game.probes, { cls: 'ok', instant: true, group: 'replicate' });
+      log('> /replicate  探测器 ' + game.probes, { cls: 'ok', instant: true, group: 'replicate' });
     }
 
   } else if (id === 'save') {
@@ -328,6 +329,7 @@ function runCommand(id) {
 
 /* ---------- 存档:localStorage ---------- */
 const SAVE_KEY = 'vn-01-save';
+let autoSaveTimer = null;
 
 function readSave() {
   const raw = localStorage.getItem(SAVE_KEY);
@@ -335,20 +337,40 @@ function readSave() {
   try { return JSON.parse(raw); } catch (e) { return null; }
 }
 
-function saveGame(silent) {
-  const data = {
+// 当前状态的快照;active 表示「正在游戏中」(决定刷新后是否自动续玩)
+function snapshot() {
+  return {
     v: D.version,
     savedAt: Date.now(),
+    active: running,
     material: game.material,
     probes:   game.probes,
     timeSec:  game.timeSec,
     importantLog: game.importantLog,
   };
+}
+
+function writeSave(data) {
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+}
+
+function saveGame(silent) {
+  writeSave(snapshot());
   if (!silent) {
-    log('> save', { cls: 'cmd' });
+    log('> /save', { cls: 'cmd' });
     log('  进度已保存。T+' + fmtTime(game.timeSec), { cls: 'ok' });
   }
+}
+
+// 运行中每 3 秒自动存一次 —— 刷新 / 意外关闭也能续上
+function startAutoSave() {
+  stopAutoSave();
+  autoSaveTimer = setInterval(function () {
+    if (running) writeSave(snapshot());
+  }, 3000);
+}
+function stopAutoSave() {
+  if (autoSaveTimer) { clearInterval(autoSaveTimer); autoSaveTimer = null; }
 }
 
 function applySave(d) {
@@ -409,6 +431,8 @@ function startNew() {
   running = true;
   setInputEnabled(false);   // 启动序列期间不能输入
   showScreen('game');
+  startAutoSave();
+  writeSave(snapshot());
   boot();
 }
 
@@ -427,25 +451,52 @@ function startLoaded(d) {
   log('存档已载入。', { cls: 'ok' });
   log('  从 T+' + fmtTime(game.timeSec) + ' 继续。', { cls: 'dim' });
   buildCommands();
+  startAutoSave();
 }
 
-/* ---------- 「以前的信息」:折叠展示退出前的重要消息 ---------- */
+// 刷新后自动回到游戏:把上次的会话接着跑
+function resumeSession(d) {
+  applySave(d);
+  clearLog();
+  charsOnline = true;
+  running = true;
+  showScreen('game');
+  render();
+  log('会话已恢复。T+' + fmtTime(game.timeSec), { cls: 'ok' });
+  log('  刷新前的进度已保留。', { cls: 'dim' });
+  buildCommands();
+  startAutoSave();
+}
+
+/* ---------- 「以前的信息」:折叠展示退出前的重要消息(可展开 / 收起) ---------- */
 function addArchivedEntry(archived) {
-  let index = 0;
   const entry = document.createElement('div');
+  const shown = [];
+  let expanded = false;
+
   entry.className = 'line archived';
-  entry.textContent = '▽ 以前的信息 (点击展开)';
+
+  function setLabel() {
+    entry.textContent = expanded ? '△ 以前的信息 (点击收起)' : '▽ 以前的信息 (点击展开)';
+  }
+  setLabel();
 
   entry.onclick = function () {
-    const page = archived.slice(index, index + D.archivePageSize);
-    index += page.length;
-    for (const m of page) {
-      const el = document.createElement('div');
-      el.className = 'line' + (m.cls ? ' ' + m.cls : '');
-      el.textContent = m.text;
-      logEl.insertBefore(el, entry);   // 展开的内容插在折叠行上方
+    if (!expanded) {
+      for (const m of archived) {
+        const el = document.createElement('div');
+        el.className = 'line' + (m.cls ? ' ' + m.cls : '');
+        el.textContent = m.text;
+        logEl.insertBefore(el, entry);   // 展开的内容插在折叠行上方
+        shown.push(el);
+      }
+      expanded = true;
+    } else {
+      for (const el of shown) el.remove();   // 收起:把展开的内容全部拿掉
+      shown.length = 0;
+      expanded = false;
     }
-    if (index >= archived.length) entry.remove();   // 全部展开后,折叠行消失
+    setLabel();
     logEl.scrollTop = logEl.scrollHeight;
   };
 
@@ -455,12 +506,9 @@ function addArchivedEntry(archived) {
 
 /* ---------- 返回封面 / 退出 ---------- */
 function exitToCover() {
-  saveGame(true);   // 退出前自动保存(含重要消息),下次可从封面读档
   running = false;
-  clearLog();
-  setInputEnabled(false);
-  showScreen('cover');
-  refreshCover();
+  writeSave(snapshot());   // active:false —— 刷新后会停在封面,而不是自动续玩
+  showCover();
 }
 
 function quitGame() {
@@ -541,10 +589,7 @@ function openSettings() {
 }
 
 /* ---------- 封面 ---------- */
-function initCover() {
-  showScreen('cover');
-  running = false;
-
+function bindCover() {
   document.getElementById('btn-new').onclick = startNew;
   document.getElementById('btn-load').onclick = function () {
     const d = readSave();
@@ -556,7 +601,15 @@ function initCover() {
     showScreen('cover');
     refreshCover();
   };
+}
 
+// 回到封面(不删存档,只是停止运行)
+function showCover() {
+  running = false;
+  stopAutoSave();
+  setInputEnabled(false);
+  clearLog();
+  showScreen('cover');
   refreshCover();
 }
 
@@ -566,14 +619,24 @@ function refreshCover() {
   document.getElementById('btn-load').disabled = !readSave();
 }
 
-// 运行中刷新 / 关闭页面时提醒一下,避免被当成「退出」而丢掉进度
-window.addEventListener('beforeunload', function (e) {
-  if (!running) return;
-  e.preventDefault();
-  e.returnValue = '';
+// 离开页面时(刷新 / 关闭)顺手存一次,刷新后可以接着玩;不再弹确认框
+window.addEventListener('beforeunload', function () {
+  if (running) writeSave(snapshot());
+});
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden && running) writeSave(snapshot());
 });
 
 setInputEnabled(false);   // 先锁住输入行,进游戏后再打开
 readSettings();
-initCover();
+bindCover();
+
+// 上次若是在游戏中(刷新 / 意外关闭),直接续玩;否则显示封面
+const savedSession = readSave();
+if (savedSession && savedSession.active) {
+  resumeSession(savedSession);
+} else {
+  showCover();
+}
+
 setInterval(tick, 100);   // 每 0.1 秒推进一次;具体加多少由真实时间决定

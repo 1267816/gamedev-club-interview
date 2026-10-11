@@ -8,7 +8,7 @@ const GAME_DATA = {
   title: "VN-CommandLineSystem 自复制探测器命令行系统",
 
   // 游戏版本号(与 plan.md / test_datalog.md 的版本保持一致)
-  version: "V0.0.5",
+  version: "V0.0.6",
 
   // 数值:全部集中在这里,方便"一次只调一样"
   numbers: {
@@ -39,28 +39,28 @@ const GAME_DATA = {
   commands: [
     {
       id:    "mine",
-      label: "mine",
-      hint:  "手动采集材料 +1(输入命令执行)",
+      label: "/mine",
+      hint:  "采集材料 +1",
       group: "mine",          // 连续的同名操作会折叠成一条并计数
       clickable: false,       // 点击功能以后由科技树解锁
     },
     {
       id:           "replicate",
-      label:        "replicate",
-      hint:         "消耗 10 材料,复制一个探测器(输入命令执行)",
+      label:        "/replicate",
+      hint:         "消耗 10 材料,复制一个探测器",
       costMaterial: 10,
       group:        "replicate",
       clickable:    false,    // 点击功能以后由科技树解锁
     },
     {
       id:    "save",
-      label: "save",
+      label: "/save",
       hint:  "保存当前进度",
       clickable: true,
     },
     {
       id:    "exit",
-      label: "exit",
+      label: "/exit",
       hint:  "返回封面(会先自动保存)",
       clickable: true,
     },
@@ -79,7 +79,4 @@ const GAME_DATA = {
     probes:   "探测器:数量越多,材料产出越快。",
     output:   "产出:当前每秒自动获得的材料。",
   },
-
-  // 「以前的信息」每点一次展开多少行
-  archivePageSize: 8,
 };
