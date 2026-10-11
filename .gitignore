@@ -1,0 +1,13 @@
+# 系统文件
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# 编辑器
+.vscode/
+.idea/
+
+# 构建产物(本项目为纯静态,通常没有,预留)
+*.exe
+*.o
+node_modules/
