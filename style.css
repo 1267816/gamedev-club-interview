@@ -1,0 +1,114 @@
+/* ============================================================
+   style.css —— 终端风样式。
+   想改配色/字体/扫描线,只改这个文件。
+   ============================================================ */
+
+:root {
+  --bg:     #05080a;   /* 背景 */
+  --fg:     #8effa8;   /* 主文字:荧光绿 */
+  --dim:    #4a7d5c;   /* 次要文字 */
+  --err:    #ff8080;   /* 错误 */
+  --accent: #ffd479;   /* 命令高亮:琥珀 */
+  --line:   #12261a;   /* 分隔线 */
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  /* 等宽字体:ASCII 用 Consolas,中文回退到新宋体(和你 Dev-C++ 里的习惯一致) */
+  font-family: Consolas, "NSimSun", "新宋体", monospace;
+  font-size: 15px;
+  line-height: 1.6;
+  overflow: hidden;
+  text-shadow: 0 0 6px rgba(120, 255, 160, .35);
+}
+
+/* CRT 扫描线。想要更"老显示器"就留着;不想要,删掉这一整块即可。 */
+body::after {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(transparent 0 2px, rgba(0, 0, 0, .16) 2px 3px);
+}
+
+#screen {
+  height: 100vh;
+  padding: 16px 20px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 240px;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "header side"
+    "log    side"
+    "prompt side";
+}
+
+#header {
+  grid-area: header;
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+#log {
+  grid-area: log;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding-right: 8px;
+}
+
+#side {
+  grid-area: side;
+  border-left: 1px solid var(--line);
+  padding-left: 14px;
+  font-size: 14px;
+}
+
+#prompt {
+  grid-area: prompt;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.line    { min-height: 1.6em; }
+.dim     { color: var(--dim); }
+.ok      { color: var(--fg); }
+.err     { color: var(--err); }
+.cmd     { color: var(--accent); }
+
+#ps1 { margin-bottom: 10px; }
+#caret {
+  display: inline-block;
+  width: .6em; height: 1.1em;
+  background: var(--fg);
+  vertical-align: -2px;
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+#commands { display: flex; gap: 10px; flex-wrap: wrap; }
+#commands button {
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 6px 12px;
+  cursor: pointer;
+  text-shadow: inherit;
+}
+#commands button:hover { border-color: var(--fg); }
+#commands button:disabled {
+  color: var(--dim);
+  cursor: not-allowed;
+  text-shadow: none;
+}
+
+.row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.bar { letter-spacing: 1px; margin: 2px 0 10px; }

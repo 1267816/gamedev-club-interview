@@ -3,11 +3,35 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>gamedev-club-interview</title>
+  <title>VN-01</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>项目已初始化</h1>
-  <p>打开浏览器控制台(F12)应无红色报错。</p>
-  <p>下一步:确定核心循环与记忆点。</p>
+  <div id="screen">
+
+    <!-- 顶部:系统标题 + 运行计时 -->
+    <header id="header">
+      <span id="header-title">--</span>
+      <span id="header-time">T+00:00:00</span>
+    </header>
+
+    <!-- 主区:终端日志流(叙事在这里展开) -->
+    <main id="log" aria-live="polite"></main>
+
+    <!-- 侧栏:资源/产出读数(文字 + ASCII 条,不放日志) -->
+    <aside id="side">
+      <div id="readout"></div>
+    </aside>
+
+    <!-- 底部:命令提示行 + 可点击的命令 -->
+    <footer id="prompt">
+      <div id="ps1"><span>&gt;</span> <span id="caret"></span></div>
+      <div id="commands"></div>
+    </footer>
+
+  </div>
+
+  <script src="game-data.js"></script>
+  <script src="game.js"></script>
 </body>
 </html>
