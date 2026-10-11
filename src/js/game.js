@@ -13,6 +13,7 @@ const game = {
   timeSec:  0,          // 游戏内经过的秒数
   lastTick: Date.now(), // 上一次推进的真实时刻
   importantLog: [],     // 重要消息(剧情 / 系统提示),存档时一并保存
+  logHistory: [],       // 终端日志历史,刷新后原样恢复
 };
 
 // 游戏是否在运行:封面、未开始时不流动
@@ -51,6 +52,10 @@ function log(text, opts) {
     lastLine.count += 1;
     lastLine.base = text;   // 用最新的数据,而不是第一次那条
     lastLine.el.textContent = lastLine.base + ' ×' + lastLine.count;
+    // 日志历史里的最后一条同步更新
+    if (game.logHistory.length) {
+      game.logHistory[game.logHistory.length - 1].text = lastLine.base + ' ×' + lastLine.count;
+    }
     logEl.scrollTop = logEl.scrollHeight;
     return;
   }
@@ -64,6 +69,12 @@ function log(text, opts) {
     important: opts.important,
   });
   pump();
+}
+
+// 记录一行到日志历史(刷新后原样恢复);只保留最近 400 行
+function pushHistory(text, cls) {
+  game.logHistory.push({ text: text, cls: cls || '' });
+  if (game.logHistory.length > 400) game.logHistory.shift();
 }
 
 function pump() {
@@ -84,6 +95,7 @@ function pump() {
   // 记下"最近一行",供重复操作折叠使用;重要消息则归档
   lastLine = item.group ? { el: line, base: item.text, count: 1, group: item.group } : null;
   if (item.important) game.importantLog.push({ text: item.text, cls: item.cls || '' });
+  pushHistory(item.text, item.cls);
 
   // 高频短行(比如手动的 +1)用 instant,不排队打字,免得刷屏卡住
   if (item.instant) {
@@ -314,7 +326,7 @@ function runCommand(id) {
     } else {
       game.material -= cost;
       game.probes  += 1;
-      log('> /replicate  探测器 ' + game.probes, { cls: 'ok', instant: true, group: 'replicate' });
+      log('> /replicate', { cls: 'ok', instant: true, group: 'replicate' });
     }
 
   } else if (id === 'save') {
@@ -347,6 +359,7 @@ function snapshot() {
     probes:   game.probes,
     timeSec:  game.timeSec,
     importantLog: game.importantLog,
+    logHistory: game.logHistory,
   };
 }
 
@@ -378,6 +391,7 @@ function applySave(d) {
   game.probes   = Number(d.probes)   || 1;
   game.timeSec  = Number(d.timeSec)  || 0;
   game.importantLog = Array.isArray(d.importantLog) ? d.importantLog : [];
+  game.logHistory   = Array.isArray(d.logHistory)   ? d.logHistory   : [];
   game.lastTick = Date.now();
 }
 
@@ -421,6 +435,7 @@ function resetGame() {
   game.probes   = 1;
   game.timeSec  = 0;
   game.importantLog = [];
+  game.logHistory = [];
   game.lastTick = Date.now();
 }
 
@@ -454,7 +469,7 @@ function startLoaded(d) {
   startAutoSave();
 }
 
-// 刷新后自动回到游戏:把上次的会话接着跑
+// 刷新后接着跑:把整屏日志原样贴回来,手感等同于"什么都没发生"
 function resumeSession(d) {
   applySave(d);
   clearLog();
@@ -462,10 +477,21 @@ function resumeSession(d) {
   running = true;
   showScreen('game');
   render();
-  log('会话已恢复。T+' + fmtTime(game.timeSec), { cls: 'ok' });
-  log('  刷新前的进度已保留。', { cls: 'dim' });
+  renderHistory(game.logHistory);
   buildCommands();
   startAutoSave();
+}
+
+// 把整段日志历史原样贴回终端
+function renderHistory(history) {
+  for (const m of history) {
+    const el = document.createElement('div');
+    el.className = 'line' + (m.cls ? ' ' + m.cls : '');
+    el.textContent = m.text;
+    logEl.appendChild(el);
+  }
+  lastLine = null;
+  logEl.scrollTop = logEl.scrollHeight;
 }
 
 /* ---------- 「以前的信息」:折叠展示退出前的重要消息(可展开 / 收起) ---------- */
