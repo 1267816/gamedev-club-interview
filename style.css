@@ -83,6 +83,13 @@ body::after {
 .err     { color: var(--err); }
 .cmd     { color: var(--accent); }
 
+/* 字符解析系统上线时,被还原的行闪一下 */
+.line.reveal { animation: flash .55s ease-out; }
+@keyframes flash {
+  from { background: rgba(142, 255, 168, .18); }
+  to   { background: transparent; }
+}
+
 #ps1 { margin-bottom: 10px; }
 #caret {
   display: inline-block;

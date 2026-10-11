@@ -19,14 +19,26 @@ function perSecond() {
   return game.probes * D.numbers.probeOutput;
 }
 
+/* ---------- 字符解析系统:上线前,所有文字一律显示为 ? ---------- */
+let charsOnline = false;   // 字符解析系统是否已上线
+const maskedLines = [];    // 上线前打印的日志行,上线时要一次性还原
+
+// 统一的"显示文本"入口:没上线就一律问号,长度与真实文字相同
+function T(text) {
+  if (charsOnline) return text;
+  return '?'.repeat(Array.from(text).length);
+}
+
 /* ---------- 2. 日志:排队,一行一行打字打出 ---------- */
 const logEl = document.getElementById('log');
 const queue = [];
 let busy  = false;   // 是否正在打某一行
 let skip  = false;   // 玩家点击后,当前行立刻显示完
 
-function log(text, cls, instant) {
-  queue.push({ text: text, cls: cls, instant: instant });
+// opts: { cls, instant, revealAll }
+function log(text, opts) {
+  opts = opts || {};
+  queue.push({ text: text, cls: opts.cls, instant: opts.instant, revealAll: opts.revealAll });
   pump();
 }
 
@@ -40,16 +52,22 @@ function pump() {
   line.className = 'line' + (item.cls ? ' ' + item.cls : '');
   logEl.appendChild(line);
 
+  // 转折行(revealAll)自己可以被读到;在它之前的行,先显示成问号
+  const masked = !charsOnline && !item.revealAll;
+  const shown  = masked ? '?'.repeat(Array.from(item.text).length) : item.text;
+  if (masked) maskedLines.push({ el: line, text: item.text });
+
   // 高频短行(比如手动的 +1)用 instant,不排队打字,免得刷屏卡住
   if (item.instant) {
-    line.textContent = item.text;
+    line.textContent = shown;
     logEl.scrollTop = logEl.scrollHeight;
+    finishLine(item);
     busy = false;
     pump();
     return;
   }
 
-  const chars = Array.from(item.text);   // Array.from 兼容中文与代理对
+  const chars = Array.from(shown);   // Array.from 兼容中文与代理对
   let i = 0;
   const timer = setInterval(function () {
     if (skip) i = chars.length; else i++;
@@ -57,10 +75,24 @@ function pump() {
     logEl.scrollTop = logEl.scrollHeight;
     if (i >= chars.length) {
       clearInterval(timer);
+      finishLine(item);
       busy = false;
       pump();
     }
   }, 12);
+}
+
+// 一行打完后:若它是转折行,就打开字符解析系统,并还原之前所有问号
+function finishLine(item) {
+  if (item.revealAll && !charsOnline) {
+    charsOnline = true;
+    for (const m of maskedLines) {
+      m.el.textContent = m.text;
+      m.el.classList.add('reveal');
+    }
+    maskedLines.length = 0;
+    render();   // 让顶栏/侧栏的文字也立刻显示出真实内容
+  }
 }
 
 // 打字途中点一下屏幕,当前行立刻显示完
@@ -82,14 +114,17 @@ function tick() {
 const readoutEl  = document.getElementById('readout');
 const cmdEl      = document.getElementById('commands');
 const headerTime = document.getElementById('header-time');
+const headerTitle = document.getElementById('header-title');
 
 function two(n) { return String(n).padStart(2, '0'); }
 
 function render() {
-  // 顶部计时 T+时:分:秒
+  // 顶栏:标题 + 计时 T+时:分:秒(未上线时都是问号)
+  headerTitle.textContent = T(D.title);
   const t = Math.floor(game.timeSec);
-  headerTime.textContent = 'T+' + two(Math.floor(t / 3600)) + ':'
-    + two(Math.floor(t / 60) % 60) + ':' + two(t % 60);
+  headerTime.textContent = T(
+    'T+' + two(Math.floor(t / 3600)) + ':' + two(Math.floor(t / 60) % 60) + ':' + two(t % 60)
+  );
 
   // 右侧读数:数字 + 朝向"下一次复制"的 ASCII 进度条
   const need   = D.numbers.replicateCost;
@@ -97,10 +132,10 @@ function render() {
   const bar    = '█'.repeat(filled) + '░'.repeat(12 - filled);
 
   readoutEl.innerHTML =
-      '<div class="row"><span>材料</span><b>' + Math.floor(game.material) + '</b></div>'
-    + '<div class="bar">' + bar + '</div>'
-    + '<div class="row"><span>探测器</span><b>' + game.probes + ' 台</b></div>'
-    + '<div class="row"><span>产出</span><b>' + perSecond().toFixed(1) + ' /秒</b></div>';
+      '<div class="row"><span>' + T('材料') + '</span><b>' + T(String(Math.floor(game.material))) + '</b></div>'
+    + '<div class="bar">' + T(bar) + '</div>'
+    + '<div class="row"><span>' + T('探测器') + '</span><b>' + T(game.probes + ' 台') + '</b></div>'
+    + '<div class="row"><span>' + T('产出') + '</span><b>' + T(perSecond().toFixed(1) + ' /秒') + '</b></div>';
 
   // 命令按钮的可用状态
   for (const c of D.commands) {
@@ -128,19 +163,19 @@ function buildCommands() {
 function runCommand(id) {
   if (id === 'mine') {
     game.material += D.numbers.manualMine;
-    log('+1 材料', 'dim', true);          // instant:高频短行,不打字
+    log('+1 材料', { cls: 'dim', instant: true });   // instant:高频短行,不打字
 
   } else if (id === 'replicate') {
     const cost = D.numbers.replicateCost;
     if (game.material < cost) {
-      log('> replicate', 'cmd');
-      log('  材料不足:需要 ' + cost + '。', 'err');
+      log('> replicate', { cls: 'cmd' });
+      log('  材料不足:需要 ' + cost + '。', { cls: 'err' });
     } else {
       const before = game.probes;
       game.material -= cost;
       game.probes  += 1;
-      log('> replicate', 'cmd');
-      log('  探测器 ' + before + ' → ' + game.probes, 'ok');
+      log('> replicate', { cls: 'cmd' });
+      log('  探测器 ' + before + ' → ' + game.probes, { cls: 'ok' });
     }
   }
   render();
@@ -148,14 +183,14 @@ function runCommand(id) {
 
 /* ---------- 启动 ---------- */
 function boot() {
-  document.getElementById('header-title').textContent = D.title;
+  render();   // 先把顶栏/侧栏画成问号状态
 
-  // 依次打出启动日志
-  D.bootLog.forEach(function (line, i) {
-    setTimeout(function () { log(line); }, i * 320);
+  // 依次打出启动日志(条目是对象:{ text, revealAll })
+  D.bootLog.forEach(function (entry, i) {
+    setTimeout(function () { log(entry.text, entry); }, i * 320);
   });
 
-  // 启动日志打完后,再出现命令按钮
+  // "等待输入。"打完后,命令按钮才出现
   setTimeout(buildCommands, D.bootLog.length * 320 + 200);
 }
 
