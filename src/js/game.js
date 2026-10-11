@@ -12,9 +12,14 @@ const game = {
   probes:   1,          // 探测器数量
   timeSec:  0,          // 游戏内经过的秒数
   lastTick: Date.now(), // 上一次推进的真实时刻
+  commandsRun: 0,       // 已执行命令数(剧情触发用)
+  fired:    [],         // 已触发的剧情节点 id(剧情 / 引导见 game-data.js 的 story)
   importantLog: [],     // 重要消息(剧情 / 系统提示),存档时一并保存
   logHistory: [],       // 终端日志历史,刷新后原样恢复
 };
+
+// 启动序列是否已打完(P1 引导、引导提示都要等它结束)
+let bootDone = false;
 
 // 游戏是否在运行:封面、未开始时不流动
 let running = false;
@@ -149,6 +154,7 @@ function tick() {
   if (!running) return;          // 封面 / 未开始时,时间不流动
   game.timeSec += dt;
   game.material += perSecond() * dt;
+  checkStory();                  // 数值一达标,剧情 / 引导就顺着打出来
   render();
 }
 
@@ -159,8 +165,11 @@ const headerTime = document.getElementById('header-time');
 const headerTitle = document.getElementById('header-title');
 const hintEl     = document.getElementById('hint');
 
-// 命令提示行:悬停 / 聚焦某个命令时,在按钮上方显示它的说明
-function setHint(text) { hintEl.textContent = text || ''; }
+// 命令提示行:悬停 / 聚焦某个命令时显示它的说明;
+// 没有悬停任何东西时,显示"引导提示"(由当前进度决定,数据在 game-data.js 的 guideHints)。
+let hoverHint = '';
+function setHint(text) { hoverHint = text || ''; paintHint(); }
+function paintHint() { hintEl.textContent = hoverHint || guideHint(); }
 
 // 侧栏读数面板:悬停每一行时,也在提示行显示它的说明(数据在 game-data.js 的 panelHints)
 readoutEl.addEventListener('mouseover', function (e) {
@@ -200,6 +209,65 @@ function render() {
       btn.disabled = game.material < c.costMaterial;
     }
   }
+
+  paintHint();   // 引导提示随进度变化
+}
+
+/* ---------- 剧情 / 引导:节点表驱动(内容全在 game-data.js 的 story) ---------- */
+// 节点的 when 条件:写了几个就要同时满足几个
+function storyReady(when) {
+  const w = when || {};
+  if (w.onBoot && !bootDone) return false;
+  if (w.after  && game.fired.indexOf(w.after) < 0) return false;
+  if (w.commandsRun != null && game.commandsRun < w.commandsRun) return false;
+  if (w.material    != null && game.material    < w.material)    return false;
+  if (w.probes      != null && game.probes      < w.probes)      return false;
+  if (w.timeSec     != null && game.timeSec     < w.timeSec)     return false;
+  return true;
+}
+
+// 扫一遍剧情表:新满足的节点按表内顺序打出来;一次可以连着触发多个(如 p2 → p3 → p4)
+function checkStory() {
+  let again = true;
+  let guard = 0;
+  while (again && guard++ < 50) {
+    again = false;
+    for (const node of D.story) {
+      if (game.fired.indexOf(node.id) >= 0) continue;
+      if (!storyReady(node.when)) continue;
+      game.fired.push(node.id);
+      for (const line of node.lines) {
+        log(line.text, { cls: line.cls, important: node.important !== false });
+      }
+      again = true;   // 刚触发的节点可能解锁了下一个(如 after),再扫一遍
+    }
+  }
+}
+
+// 旧存档没有剧情进度时的兜底:把"此刻已经该发生"的节点直接记为已触发,
+// 避免读档瞬间一次刷出一大段剧情。返回是否有内容被跳过。
+function backfillStory() {
+  let skipped = false;
+  let guard = 0;
+  while (guard++ < 50) {
+    const node = D.story.find(function (n) {
+      return game.fired.indexOf(n.id) < 0 && storyReady(n.when);
+    });
+    if (!node) break;
+    game.fired.push(node.id);
+    skipped = true;
+  }
+  return skipped;
+}
+
+// 引导提示:输入框为空且没有悬停任何东西时,提示行常显的那一句
+function guideHint() {
+  if (!bootDone) return '';
+  let text = '';
+  for (const g of D.guideHints) {
+    if (storyReady(g.when)) text = g.text;   // 取满足条件的最后一条(越靠后 = 阶段越晚)
+  }
+  return text;
 }
 
 /* ---------- 建命令按钮(只建一次) ---------- */
@@ -315,6 +383,8 @@ cmdInput.addEventListener('keydown', function (e) {
 
 /* ---------- 响应命令 ---------- */
 function runCommand(id) {
+  game.commandsRun += 1;
+
   if (id === 'mine') {
     game.material += D.numbers.manualMine;
     log('+1 材料', { cls: 'dim', instant: true, group: 'mine' });
@@ -336,6 +406,7 @@ function runCommand(id) {
     exitToCover();
     return;   // 已切回封面,不必再渲染游戏界面
   }
+  checkStory();   // 命令可能刚好跨过某个剧情 / 引导的触发点
   render();
 }
 
@@ -358,6 +429,8 @@ function snapshot() {
     material: game.material,
     probes:   game.probes,
     timeSec:  game.timeSec,
+    commandsRun: game.commandsRun,
+    fired:    game.fired,
     importantLog: game.importantLog,
     logHistory: game.logHistory,
   };
@@ -387,12 +460,18 @@ function stopAutoSave() {
 }
 
 function applySave(d) {
+  bootDone = true;   // 读档时不存在启动序列,引导提示与剧情条件直接可用
   game.material = Number(d.material) || 0;
   game.probes   = Number(d.probes)   || 1;
   game.timeSec  = Number(d.timeSec)  || 0;
+  game.commandsRun = Number(d.commandsRun) || 0;
   game.importantLog = Array.isArray(d.importantLog) ? d.importantLog : [];
   game.logHistory   = Array.isArray(d.logHistory)   ? d.logHistory   : [];
+  // 旧存档(V0.1.0 之前)没有剧情进度:把"此刻已经该发生"的节点记为已触发,避免读档瞬间刷屏
+  const legacy = !Array.isArray(d.fired);
+  game.fired = legacy ? [] : d.fired.slice();
   game.lastTick = Date.now();
+  if (legacy) backfillStory();
 }
 
 /* ---------- 清空日志(开新档 / 读档时用) ---------- */
@@ -426,14 +505,21 @@ function boot() {
     }, i * 320);
   });
 
-  // "等待输入。"打完后,命令按钮才出现
-  setTimeout(buildCommands, D.bootLog.length * 320 + 200);
+  // "等待输入。"打完后:命令按钮出现,引导(P1)接着开口
+  setTimeout(function () {
+    bootDone = true;
+    buildCommands();
+    checkStory();
+    paintHint();
+  }, D.bootLog.length * 320 + 200);
 }
 
 function resetGame() {
   game.material = 0;
   game.probes   = 1;
   game.timeSec  = 0;
+  game.commandsRun = 0;
+  game.fired    = [];
   game.importantLog = [];
   game.logHistory = [];
   game.lastTick = Date.now();
@@ -443,6 +529,7 @@ function startNew() {
   resetGame();
   clearLog();
   charsOnline = false;   // 新档:重新经历一次"字符解析系统上线"
+  bootDone = false;      // 新档:引导要等启动序列打完
   running = true;
   setInputEnabled(false);   // 启动序列期间不能输入
   showScreen('game');

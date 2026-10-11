@@ -9,6 +9,7 @@
   --dim:    #4a7d5c;   /* 次要文字 */
   --err:    #ff8080;   /* 错误 */
   --accent: #ffd479;   /* 命令高亮:琥珀 */
+  --relic:  #ffb473;   /* 人类遗物:暖色(与冷色的机器日志作对比) */
   --line:   #12261a;   /* 分隔线 */
 }
 
@@ -84,6 +85,16 @@ body::after {
 .ok      { color: var(--fg); }
 .err     { color: var(--err); }
 .cmd     { color: var(--accent); }
+
+/* 人类遗物(附加数据):暖色 + 慢慢浮出,和机器的冷日志形成对比 */
+.line.relic {
+  color: var(--relic);
+  animation: relic-in 1.2s ease-out;
+}
+@keyframes relic-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 
 /* 字符解析系统上线时,被还原的行闪一下 */
 .line.reveal { animation: flash .55s ease-out; }
