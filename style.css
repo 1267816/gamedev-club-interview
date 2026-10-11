@@ -25,6 +25,8 @@ body {
   line-height: 1.6;
   overflow: hidden;
   text-shadow: 0 0 6px rgba(120, 255, 160, .35);
+  user-select: none;            /* 禁止长按 / 拖拽 / 右键选中文字 */
+  -webkit-user-select: none;
 }
 
 /* CRT 扫描线。想要更"老显示器"就留着;不想要,删掉这一整块即可。 */
@@ -90,7 +92,12 @@ body::after {
   to   { background: transparent; }
 }
 
-#ps1 { margin-bottom: 10px; }
+#ps1 { margin-bottom: 6px; }
+#hint {
+  color: var(--dim);
+  min-height: 1.6em;   /* 占位,避免悬停时布局跳动 */
+  margin-bottom: 6px;
+}
 #caret {
   display: inline-block;
   width: .6em; height: 1.1em;

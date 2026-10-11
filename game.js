@@ -121,6 +121,10 @@ const readoutEl  = document.getElementById('readout');
 const cmdEl      = document.getElementById('commands');
 const headerTime = document.getElementById('header-time');
 const headerTitle = document.getElementById('header-title');
+const hintEl     = document.getElementById('hint');
+
+// 命令提示行:悬停 / 聚焦某个命令时,在按钮上方显示它的说明
+function setHint(text) { hintEl.textContent = text || ''; }
 
 function two(n) { return String(n).padStart(2, '0'); }
 function fmtTime(sec) {
@@ -160,8 +164,12 @@ function buildCommands() {
     const btn = document.createElement('button');
     btn.id = 'btn-' + c.id;
     btn.textContent = '[ ' + c.label + ' ]';
-    btn.title = c.hint || '';
     btn.onclick = function () { runCommand(c.id); };
+    // 用终端内建提示行,替代延迟长、样式不统一的浏览器原生 tooltip
+    btn.onmouseenter = function () { setHint(c.hint); };
+    btn.onmouseleave = function () { setHint(''); };
+    btn.onfocus      = function () { setHint(c.hint); };
+    btn.onblur       = function () { setHint(''); };
     cmdEl.appendChild(btn);
   }
   render();
@@ -227,6 +235,7 @@ function clearLog() {
   queue.length = 0;
   maskedLines.length = 0;
   busy = false;
+  setHint('');
   logEl.innerHTML = '';
 }
 

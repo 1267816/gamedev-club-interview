@@ -8,7 +8,7 @@ const GAME_DATA = {
   title: "VN-CommandLineSystem 自复制探测器命令行系统",
 
   // 游戏版本号(与 plan.md / test_datalog.md 的版本保持一致)
-  version: "V0.0.2",
+  version: "V0.0.3",
 
   // 数值:全部集中在这里,方便"一次只调一样"
   numbers: {
