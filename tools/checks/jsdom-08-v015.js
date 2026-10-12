@@ -67,6 +67,11 @@ function run() {
         await sleep(100);
         doc.getElementById('tech-list').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         await sleep(160);
+        // V0.2.0:科技要先立项再研究;测试直接拨到过去让它当场完成
+        if (peek('game.research ? game.research.id : null')) {
+          peek('game.research.startSec = game.timeSec - 9999;');
+          await sleep(150);
+        }
       };
       const waitFor = async function (cond, ms) {
         const t0 = Date.now();
@@ -114,7 +119,8 @@ function run() {
 
       console.log('\n【4. 解锁星际航行后,"结局"类别立刻从 ??? 恢复】');
       ok('解锁前类别里有 ???', cats().indexOf('???') >= 0, cats().join(','));
-      peek('game.data = 5000; game.unlocked.push("bootstrap"); renderTech();');
+      // V0.2.0:星际航行还多一道扫描闸门(探测 75%),测试里把进度补上
+      peek('game.data = 5000; game.unlocked.push("bootstrap"); game.scan = 80; renderTech();');
       await sleep(200);
       await actKey('tech:starship');
       ok('解锁星际航行', peek('game.unlocked').indexOf('starship') >= 0, JSON.stringify(peek('game.unlocked')));

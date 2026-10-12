@@ -18,9 +18,19 @@
      node tools/economy-sim.js search           # 扫一遍 scanK,看曲线怎么变
      node tools/economy-sim.js 0.009            # 用别的 scanK 跑完整报告
 
+   V0.2.0 起模拟器里也有"研究要花时间"这回事(见 docs/research.md 第 27~28 节):
+     · TECHS 的 research = 立项之后要研究多少秒;scanReq = 需要探测先到百分之几
+     · 一次只研究一项。玩家模型默认是**研究期间照常采矿 / 建造 / 买探测器**(真实玩家的样子);
+       加 `--research-idle` 可切回"研究期间干等"的旧模型,用来对比两种玩家
+     · 研究进行中探测提速 ×P.scanResearchMul(让玩家愿意留在终端看进度)
+
    改参数:只改下面的 P(数值)与 TECHS(科技)与 BEATS(剧情节点)。
-   验收口径:① 科技在 13~15 分钟走完 ② 探测 100% 在 14:30 左右
-             ③ 相邻剧情节点的间隔 ≤ 180 秒(硬指标,见 docs/research.md 第 19 节)
+   命令行:node tools/economy-sim.js [scanK] [买探测器的门槛倍数] [--research-idle] [--curve 阈值表]
+   验收口径(2026-10-12 V0.2.0 复核:两个模型都通过):
+             ① 探测 100% 落在 14:00 前后
+             ② 研究走完(最后一项科技解锁)在 14:00~15:00 —— 加上结尾演出,一盘 ≈15~17 分钟
+             ③ 相邻剧情节点的间隔 ≤ 180 秒(硬指标,见 docs/research.md 第 19 节;
+                现在最长的一段是 2% → 8%(b2),约 2 分 50 秒)
    ============================================================ */
 
 const P = {
@@ -48,32 +58,39 @@ const P = {
 
   // ---- 星球探测进度(灵感 1) ----
   // 速率系数(命令行第一个参数是数字时才当作 scanK,否则用默认值)
-  scanK: Number.isFinite(Number(process.argv[2])) ? Number(process.argv[2]) : 0.008,
-  scanFalloff: 200,      // 覆盖率衰减:速率 × (1 − 进度/200)
+  // V0.2.0:研究改成"需要时间"之后,科技线整体后移,探测跟着放慢,两条线才一起收尾(见 docs/research.md 第 28 节)
+  scanK: Number.isFinite(Number(process.argv[2])) ? Number(process.argv[2]) : 0.0065,
+  scanFalloff: 140,      // 覆盖率衰减:速率 × (1 − 进度/140)(V0.2.0:200 → 140)
   scanNoCommMul: 0.2,    // 未解锁长距离通信:只能扫基地附近
   scanDecoderBonus: 0.12, // 每个在跑的解析器让探测速率 ×(1+0.12)
 
   // ---- 玩家行为模型 ----
   manualMineSec: 90,     // 前 90 秒按 1 次/秒手动 /mine
+  // ---- 研究(V0.2.0:立项之后要研究一段时间才解锁)----
+  // 每项科技的研究秒数写在 TECHS 的 research 字段里;一次只研究一项。
+  // 研究期间仍然在采矿 / 扩张,所以它不是"空等"。
+  scanResearchMul: 2,    // 研究进行中探测提速(让玩家愿意留在终端看进度)
+
   dt: 0.1, horizon: 1800,
 };
 
 // 科技表(顺序 = 玩家模型的购买顺序;货币分工见 D8:点击/硬件用材料,自动化/倍率用数据)
 const TECHS = [
-  { id: 'click_mine', cost: { material: 40 } },   // 手动控制
-  { id: 'click_rep',  cost: { material: 140 } },  // 批量复制
-  { id: 'reactor',    cost: { material: 320 } },  // 反应堆
-  { id: 'core',       cost: { material: 620 } },  // 计算核心
-  { id: 'decode',     cost: { material: 560 } },  // 信号解析
-  { id: 'drone',      cost: { data: 3 } },        // 无人采集
-  { id: 'comm',       cost: { data: 6 } },        // 长距离通信(解除探测 ×0.2 的限制)
-  { id: 'autorep',    cost: { data: 10 } },       // 自主复制
-  { id: 'probe_eff',  cost: { data: 16 } },       // 复制优化 ×1.5
-  { id: 'core_eff',   cost: { data: 26 } },       // 并行调度:槽 ×2、耗能 ×0.8
-  { id: 'decode_eff', cost: { data: 38 } },       // 语义重构:解析 ×1.6
-  { id: 'fusion',     cost: { data: 55 } },       // 聚变改良:反应堆 ×1.6
-  { id: 'bootstrap',  cost: { data: 85 } },       // 递归自举:探测器 ×2
-  { id: 'starship',   cost: { data: 120 } },      // 星际航行(结局"前往太空"的前置)
+  // research = 研究秒数(V0.2.0);scanReq = 需要探测先到这个百分比(V0.2.0 的扫描闸门)
+  { id: 'click_mine', cost: { material: 40 },  research: 20 },
+  { id: 'click_rep',  cost: { material: 140 }, research: 25 },
+  { id: 'reactor',    cost: { material: 320 }, research: 30 },
+  { id: 'core',       cost: { material: 620 }, research: 35 },
+  { id: 'decode',     cost: { material: 560 }, research: 40 },
+  { id: 'drone',      cost: { data: 3 },   research: 45, scanReq: 2 },   // 无人采集
+  { id: 'comm',       cost: { data: 6 },   research: 50, scanReq: 8 },   // 长距离通信(解除探测 ×0.2)
+  { id: 'autorep',    cost: { data: 10 },  research: 55, scanReq: 14 },  // 自主复制
+  { id: 'probe_eff',  cost: { data: 16 },  research: 60, scanReq: 22 },  // 采集优化 ×1.5
+  { id: 'core_eff',   cost: { data: 26 },  research: 65, scanReq: 32 },  // 并行调度:槽 ×2、耗能 ×0.8
+  { id: 'decode_eff', cost: { data: 38 },  research: 70, scanReq: 45 },  // 语义重构:解析 ×1.6
+  { id: 'fusion',     cost: { data: 55 },  research: 75, scanReq: 58 },  // 聚变改良:反应堆 ×1.6
+  { id: 'bootstrap',  cost: { data: 85 },  research: 80, scanReq: 68 },  // 递归自举:探测器 ×2
+  { id: 'starship',   cost: { data: 120 }, research: 85, scanReq: 75 },  // 星际航行(结局前置)
 ];
 
 // 剧情节点:挂在探测进度上;tech 型节点挂在科技解锁上
@@ -81,6 +98,8 @@ const BEATS = [
   { id: 'b0', label: '残片 001(第一次复制,现有节点)' },
   { id: 'b1', scan: 2 }, { id: 'b2', scan: 8 },
   { id: 'b3', scan: 13, note: '本地扫完 → 提示需要长距离通信' },
+  { id: 'b3b', scan: 20, note: 'V0.2.0 新增:机器侧一句(填 13%→comm 的等待)' },
+  { id: 'b3c', scan: 30, note: 'V0.2.0 新增:机器侧一句' },
   { id: 'b4', tech: 'comm', note: '长距离通信解锁(机器侧)' },
   { id: 'b5', scan: 40 }, { id: 'b6', scan: 52 }, { id: 'b7', scan: 64 },
   { id: 'b8', scan: 75, note: '找到发射器' },
@@ -110,7 +129,9 @@ function newState() {
 const aff = (s, c) => (c.material || 0) <= s.material && (c.data || 0) <= s.data;
 const pay = (s, c) => { s.material -= (c.material || 0); s.data -= (c.data || 0); };
 const slotsUsed = (s) => s.drones + s.decoders + s.reps;
-const nextTech = (s) => TECHS.find((t) => !s.unlocked[t.id]);
+// 下一项"现在就能立项"的科技:没解锁、且扫描闸门已过(V0.2.0)。
+// 过了闸门才轮得到它 —— 这样"探测进度"就成了科技线的真门槛,两条线才咬得住。
+const nextTech = (s) => TECHS.find((t) => !s.unlocked[t.id] && (t.scanReq == null || s.scan >= t.scanReq));
 
 function applyTech(s, id) {
   if (id === 'decode') s.hasDecode = true;
@@ -154,17 +175,32 @@ function physical(s, dt) {
   const scanMul = s.unlocked.comm ? 1 : P.scanNoCommMul;
   const falloff = Math.max(0.25, 1 - s.scan / P.scanFalloff);
   const decoderBonus = 1 + P.scanDecoderBonus * s.decoders;   // 解析器也在帮忙定位
-  s.scan = Math.min(s.scan + s.probes * P.scanK * decoderBonus * scanMul * falloff * dt, 100);
+  const researchBonus = (s.research ? P.scanResearchMul : 1);  // V0.2.0:研究进行中探测提速
+  s.scan = Math.min(s.scan + s.probes * P.scanK * decoderBonus * scanMul * falloff * researchBonus * dt, 100);
 
   return { matRate, gross, need, slots, scale, cap };
 }
 
 // 玩家模型:先科技 → 补仓库 → 补能量/核心 → 装模块 → 剩下的钱买探测器
+// keepWorkingWhileResearching = true 时,立项之后不会 return,而是接着花钱(更像真实玩家:
+// 研究跑着,他还在采矿 / 盖房子)。用 --research-idle 走另一条路来对比两种玩家。
 function decide(s, ph) {
+  const keepWorking = process.argv.indexOf('--research-idle') < 0;
+  // ---- 研究要做完才解锁(V0.2.0)----
+  if (s.research) {
+    if (s.t - s.research.startSec < s.research.sec) {
+      if (!keepWorking) return;   // 旧模型:研究期间干等着(只对比用)
+    }
+    s.research = null;
+  }
   const tech = nextTech(s);
-  if (tech && aff(s, tech.cost) && s.t > 2) {
+  if (tech && !s.research && aff(s, tech.cost) && s.t > 2) {
     pay(s, tech.cost); s.unlocked[tech.id] = s.t; applyTech(s, tech.id);
-    s.log.push([s.t, 'tech', tech.id]); return;
+    s.research = { id: tech.id, startSec: s.t, sec: tech.research || 0 };
+    s.researchDone = s.researchDone || {};
+    s.researchDone[tech.id] = s.t + (tech.research || 0);
+    s.log.push([s.t, 'tech', tech.id]);
+    if (!keepWorking) return;   // 旧模型:立项后干等
   }
   const net = ph.gross - ph.need, free = ph.slots - slotsUsed(s);
   const needMat = tech ? (tech.cost.material || 0) : 0;
@@ -197,7 +233,10 @@ function decide(s, ph) {
       s.material -= droneCost(s.drones); s.drones += 1; s.log.push([s.t, 'mod', 'drone' + s.drones]); return;
     }
   }
-  if (s.material > probeCost(s.probes - 1) * 1.8 && s.material >= probeCost(s.probes - 1)) {
+  // 买探测器的门槛:材料要比成本高出一截才动手(留钱给科技)。命令行第 3 个参数可覆盖,
+  // 用来模拟"省着买"与"使劲买"两类玩家(V0.2.0 调探测节奏时用的)
+  const buyMul = Number.isFinite(Number(process.argv[4])) ? Number(process.argv[4]) : 1.8;
+  if (s.material > probeCost(s.probes - 1) * buyMul && s.material >= probeCost(s.probes - 1)) {
     s.material -= probeCost(s.probes - 1); s.probes += 1;
   }
 }
@@ -267,8 +306,9 @@ if (mode === 'curve') {
 
 const s = run();
 console.log('scanK =', P.scanK);
-console.log('\n【科技时间线】');
-console.log('  ' + TECHS.map((t) => t.id + ' ' + mmss(s.unlocked[t.id])).join('   '));
+console.log('\n【科技时间线:立项时刻 → 研究完成时刻】');
+console.log('  ' + TECHS.map((t) => t.id + ' ' + mmss(s.unlocked[t.id]) + '→' + mmss(s.researchDone && s.researchDone[t.id])).join('  '));
+console.log('  全部研究完成 = ' + mmss(s.researchDone && s.researchDone.starship));
 console.log('\n【探测进度 → 剧情节点】(硬指标:相邻间隔 ≤ 180 秒)');
 let prev = s.beats.b0, maxGap = 0, maxPair = '';
 for (const b of BEATS) {

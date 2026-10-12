@@ -69,6 +69,11 @@ function run() {
         const a = doc.querySelector('#tech-list .tech-item.active');
         return a ? a.querySelector('.t-name').textContent : null;
       };
+      // V0.2.0:解锁要先立项、研究一段时间才完成。测试不等那 20~85 秒,
+      // 直接把这个项目的"开始时刻"拨到过去,让下一帧就完成(tick 里是现算的)
+      const finishResearch = function () {
+        peek('if (game.research) { game.research.startSec = game.timeSec - 9999; advanceResearch(); }');
+      };
       const waitFor = async function (cond, ms) {
         const t0 = Date.now();
         while (Date.now() - t0 < (ms || 6000)) { if (cond()) return true; await sleep(120); }
@@ -211,6 +216,11 @@ function run() {
       await sleep(60);
       doc.querySelector('#tech-detail .unlock-btn').click();
       await sleep(200);
+      // 立项 → 研究中(先扣钱);再把它拨到过去让研究完成
+      ok('点 [ 解锁 ] 先立项(进入研究中)', peek('game.research && game.research.id') === 'click_mine'
+        && peek('game.unlocked').length === 0, String(peek('game.research && game.research.id')));
+      finishResearch();
+      await sleep(200);
       ok('鼠标点 [ 解锁 ] 成功', peek('game.unlocked').join(',') === 'click_mine', peek('game.unlocked').join(','));
       ok('扣了 40 材料', peek('game.material') < 115 && peek('game.material') > 100,
         String(Math.round(peek('game.material'))));
@@ -233,6 +243,8 @@ function run() {
       clickTechRow('批量复制');
       await sleep(60);
       press(doc.getElementById('tech-list'), 'Enter');
+      await sleep(200);
+      finishResearch();
       await sleep(200);
       ok('回车解锁成功', peek('game.unlocked').indexOf('click_rep') >= 0);
       ok('出现 [ /replicate ] 按钮', !!doc.getElementById('btn-replicate'));

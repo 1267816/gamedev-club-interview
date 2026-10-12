@@ -323,6 +323,9 @@ body::after {
 .tech-item .t-cost.over { color: var(--err); }   /* 花费超过仓库上限 → 先扩建仓库 */
 .tech-item .t-effect { color: var(--dim); }
 .tech-item.st-ready  .t-status { color: var(--fg); }
+/* V0.2.0:正在研究的项目 —— 让它在一屏里最先被看到(玩家就是靠它知道"回终端也有事做") */
+.tech-item.st-researching .t-status { color: var(--accent); }
+.tech-item.st-researching .t-name   { color: var(--accent); }
 .tech-item.st-done   .t-status { color: var(--dim); }
 .tech-item.st-locked .t-status,
 .tech-item.st-wip    .t-status { color: var(--dim); }
@@ -336,6 +339,11 @@ body::after {
 
 #tech-foot { border-top: 1px solid var(--line); padding-top: 8px; }
 #tech-hint { color: var(--accent); min-height: 1.6em; }
+/* 终端有新消息:单独一行、闪一下,但不是弹窗、也不打断操作(用户拍板 R6) */
+#tech-pending { color: var(--relic); animation: blink 1.1s steps(2, start) infinite; }
+#tech-pending.hidden { display: none; }
+#tech-detail .d-research { color: var(--accent); }
+@keyframes blink { to { visibility: hidden; } }
 #tech-ps1 { display: flex; align-items: center; gap: 8px; }
 #tech-input {
   flex: 1;

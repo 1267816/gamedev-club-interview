@@ -63,6 +63,9 @@ function run() {
         await sleep(60);
         doc.getElementById('tech-list').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         await sleep(120);
+        // V0.2.0:科技是"立项 → 研究一段时间 → 完成"。测试不等,直接拨到过去让它当场完成
+        peek('if (game.research) { game.research.startSec = game.timeSec - 9999; advanceResearch(); }');
+        await sleep(150);
       };
       const hint = () => doc.getElementById('tech-hint').textContent;
       const readout = () => doc.getElementById('readout').textContent;
@@ -221,6 +224,7 @@ function run() {
       ok('没通信时探测很慢(×0.2)', slow > 0 && slow < 6, slow.toFixed(2));
       ok('没有通信时提示要研究长距离通信', hint().indexOf('长距离通信') >= 0 || lines().some((l) => l.indexOf('更远的链路') >= 0));
       peek('game.data = 500');
+      peek('game.scan = 20');   // V0.2.0:长距离通信的扫描门槛是 8%,先让探测进度够
       await doNode('长距离通信', 'tech', 'data');
       ok('长距离通信解锁', peek('game.unlocked').indexOf('comm') >= 0);
       const s0 = peek('game.scan');
@@ -270,7 +274,9 @@ function run() {
       const p0 = peek('game.probes');
       await sleep(5000);
       ok('复制助手会自动复制(5 秒内 +1)', peek('game.probes') > p0, p0 + ' → ' + peek('game.probes'));
-      const repOk = await waitFor(() => lines().some((l) => l.indexOf('解锁 反应堆') >= 0), 4000);
+      // V0.2.0:解锁日志变成"> 研究完成 X —— 效果"(立项那行是"> 立项 X —— 研究 N 秒")
+      const allText = lines().join('\n');
+      const repOk = allText.indexOf('研究完成 反应堆') >= 0 || allText.indexOf('立项 反应堆') >= 0;
       ok('科技树操作日志仍在终端', repOk);
       ok('控制台无报错', errors.length === 0, JSON.stringify(errors));
 

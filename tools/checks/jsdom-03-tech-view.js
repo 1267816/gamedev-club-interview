@@ -57,6 +57,11 @@ function run() {
         if (!r) throw new Error('找不到节点:' + name);
         r.dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true, cancelable: true }));
       };
+      // V0.2.0:解锁 = 先立项,研究一段时间才真解锁。测试不真等 20~85 秒,
+      // 直接把这个项目的 "开始时刻" 拨到过去,让下一帧就完成(tick 里是现算的)
+      const finishResearch = function () {
+        w.eval('if (game.research) game.research.startSec = game.timeSec - 9999;');
+      };
       const ok = (label, cond, extra) => console.log((cond ? '  ✓ ' : '  ✗ ') + label + (extra ? '  → ' + extra : ''));
       // 日志是排队打字的,断言要等它落到 DOM 上
       const waitFor = async function (cond, ms) {
@@ -130,11 +135,17 @@ function run() {
       w.eval('game.material = 190');   // 仓库上限 200:材料放不到 500
       key(doc.getElementById('tech-list'), 'Enter');
       await sleep(200);
-      ok('解锁成功', peek('game.unlocked').join(',') === 'click_mine', peek('game.unlocked').join(','));
+      // V0.2.0:立项时先扣钱、进入"研究中",研究做完才解锁
+      ok('立项成功(材料已扣、进入研究中)',
+        peek('game.research && game.research.id') === 'click_mine' && peek('game.unlocked').length === 0,
+        String(peek('game.research && game.research.id')));
       ok('扣掉 40 材料(190-40+自动产出)', peek('game.material') < 155 && peek('game.material') > 120,
         String(Math.round(peek('game.material'))));
+      finishResearch();
+      await sleep(200);
+      ok('研究完成后解锁', peek('game.unlocked').join(',') === 'click_mine', peek('game.unlocked').join(','));
       ok('科技计数变成 1 / 14', doc.getElementById('tech-count').textContent.indexOf('1 / 14') >= 0);
-      ok('终端里出现解锁日志', await waitFor(() => logLines().some((l) => l.indexOf('> 解锁 简单采集') >= 0), 20000),
+      ok('终端里出现研究完成日志', await waitFor(() => logLines().some((l) => l.indexOf('> 研究完成 简单采集') >= 0), 20000),
         logLines().slice(-2).join(' | '));
       const gotFirstTech = await waitFor(() => logLines().some((l) => l.indexOf('你获得了一个成就：我们开始思考') >= 0));
       ok('获得成就「我们开始思考」(终端弹出)', peek('game.achievements').indexOf('first_tech') >= 0 && gotFirstTech,
@@ -159,6 +170,8 @@ function run() {
       await sleep(150);
       clickRowByName('批量复制');
       key(doc.getElementById('tech-list'), 'Enter');
+      await sleep(200);
+      finishResearch();
       await sleep(200);
       ok('批量复制解锁 + 成就「不必再打字」', peek('game.unlocked').indexOf('click_rep') >= 0
         && peek('game.achievements').indexOf('no_more_typing') >= 0);

@@ -8,7 +8,7 @@ const GAME_DATA = {
   title: "VN-CommandLineSystem 自复制探测器命令行系统",
 
   // 游戏版本号(与 plan.md / test_datalog.md 的版本保持一致)
-  version: "V0.1.5",
+  version: "V0.2.0",
 
   // 数值:全部集中在这里,方便"一次只调一样"
   numbers: {
@@ -30,11 +30,12 @@ const GAME_DATA = {
     warehouseCap:  200,   // 初始材料上限
     warehouseMul:  1.6,   // 每座仓库把上限 ×1.6
     // 星球探测进度(灵感 1):速率 = 探测器数 × scanK × (1 − 进度/scanFalloff) × (通信 ? 1 : scanNoCommMul)
-    scanK:         0.008,
-    scanFalloff:   200,
+      scanK:         0.0065,   // V0.2.0:研究改成"需要时间"后,探测线要跟着调,两条线才一起收尾(见 docs/research.md 第 28 节)
+      scanFalloff:   140,      // V0.2.0:200 → 140(逼近 100% 时更明显地减速)
     scanNoCommMul: 0.2,
     scanDecoderBonus: 0.12, // 每个"在跑的"解析器让探测速率 ×(1+0.12) ——
                             // 不然玩家把材料全投进数据、探测器不涨,探测就会卡在半路(用户实测:科技点完才 50%)
+      scanResearchMul: 2,     // V0.2.0:研究进行中探测提速 ×2 —— 让玩家愿意留在终端等研究(见 research 第 28 节)
   },
 
   // ============================================================
@@ -78,48 +79,52 @@ const GAME_DATA = {
       effect: "每 4 秒自动复制一次（材料 ≥ 成本×3 时）；占 1 个算力槽", desc: "把复制指令写进循环：它开始自己变多了。" },
   ],
 
-  // 科技表(14 项;花费与节奏见 docs/research.md 第 12 节与第 19 节)
+  // 科技表(14 项;花费与节奏见 docs/research.md 第 12 / 19 节与第 28 节)
+  // V0.2.0 起每个科技有两个新字段(用户拍板,见 docs/research.md 第 27.6 节 R3/R4):
+  //   research  立项之后要研究多少秒才解锁(立项时先付花费,研究期间可以继续采矿/建造)
+  //   scanReq   需要探测进度先到这个百分比(0~100),否则显示"锁定";用来把科技线和探测线咬在一起
+  //             (不写 = 没有扫描门槛)
   techs: [
-    { id: "click_mine", name: "简单采集", cat: "操作", cost: { material: 40 }, requires: [],
+    { id: "click_mine", name: "简单采集", cat: "操作", cost: { material: 40 }, requires: [], research: 20,
       unlockCommand: "mine", effect: "解锁 /mine 的点击按钮",
       desc: "把采集流程固化成一个可反复调用的例程。" },
-    { id: "click_rep", name: "批量复制", cat: "操作", cost: { material: 140 }, requires: ["click_mine"],
+    { id: "click_rep", name: "批量复制", cat: "操作", cost: { material: 140 }, requires: ["click_mine"], research: 25,
       unlockCommand: "replicate", effect: "解锁 /replicate 的点击按钮",
       desc: "把复制流程固化成一个可反复调用的例程。" },
-    { id: "reactor", name: "反应堆", cat: "硬件", cost: { material: 320 }, requires: ["click_rep"],
+    { id: "reactor", name: "反应堆", cat: "硬件", cost: { material: 320 }, requires: ["click_rep"], research: 30,
       unlockBuilding: "reactor", effect: "可建造「反应堆」",
       desc: "重启休眠的聚变堆，可以获得额外的电力。" },
-    { id: "core", name: "计算核心", cat: "硬件", cost: { material: 620 }, requires: ["reactor"],
+    { id: "core", name: "计算核心", cat: "硬件", cost: { material: 620 }, requires: ["reactor"], research: 35,
       unlockBuilding: "core", effect: "可建造「计算核心」",
       desc: "借用复制机构的空闲算力，跑一台协处理器。" },
-    { id: "decode", name: "信号解析", cat: "硬件", cost: { material: 560 }, requires: ["core"],
+    { id: "decode", name: "信号解析", cat: "硬件", cost: { material: 560 }, requires: ["core"], research: 40,
       unlockModule: "decoder", unlockResource: "data", effect: "可安装「解析器」",
       desc: "重新接入那条没有收件人的广播，把它拆成可读的数据流。" },
-    { id: "drone", name: "无人采集", cat: "自动化", cost: { data: 3 }, requires: ["decode"],
+    { id: "drone", name: "无人采集", cat: "自动化", cost: { data: 3 }, requires: ["decode"], research: 45, scanReq: 2,
       unlockModule: "drone", effect: "可安装「采集助手」",
       desc: "让机器自己去找矿，不必等操作者按下每一次采集。" },
-    { id: "comm", name: "长距离通信", cat: "通信", cost: { data: 6 }, requires: ["drone"],
+    { id: "comm", name: "长距离通信", cat: "通信", cost: { data: 6 }, requires: ["drone"], research: 50, scanReq: 8,
       effect: "解除探测范围限制（×0.2 → ×1)",
       desc: "让探测器之间能长距离连接，离开基地。" },
-    { id: "autorep", name: "自主复制", cat: "自动化", cost: { data: 10 }, requires: ["comm"],
+    { id: "autorep", name: "自主复制", cat: "自动化", cost: { data: 10 }, requires: ["comm"], research: 55, scanReq: 14,
       unlockModule: "rep", effect: "可安装「复制助手」",
       desc: "可以进行自主复制了。" },
-    { id: "probe_eff", name: "采集优化", cat: "产量", cost: { data: 16 }, requires: ["autorep"],
+    { id: "probe_eff", name: "采集优化", cat: "产量", cost: { data: 16 }, requires: ["autorep"], research: 60, scanReq: 22,
       effect: "每台探测器产出 ×1.5",
       desc: "优化采集工作流，增加产出。" },
-    { id: "core_eff", name: "并行调度", cat: "软件", cost: { data: 26 }, requires: ["probe_eff"],
+    { id: "core_eff", name: "并行调度", cat: "软件", cost: { data: 26 }, requires: ["probe_eff"], research: 65, scanReq: 32,
       effect: "每核心算力槽 ×2，耗能 ×0.8",
       desc: "让核心能够同时跑两条指令流，而且更省电。" },
-    { id: "decode_eff", name: "语义重构", cat: "解析", cost: { data: 38 }, requires: ["core_eff"],
+    { id: "decode_eff", name: "语义重构", cat: "解析", cost: { data: 38 }, requires: ["core_eff"], research: 70, scanReq: 45,
       effect: "解析速率 ×1.6",
       desc: "不再逐字解析，而是猜整段的意思。" },
-    { id: "fusion", name: "聚变改良", cat: "能源", cost: { data: 55 }, requires: ["decode_eff"],
+    { id: "fusion", name: "聚变改良", cat: "能源", cost: { data: 55 }, requires: ["decode_eff"], research: 75, scanReq: 58,
       effect: "反应堆输出 ×1.6",
       desc: "使用改良的聚变技术。" },
-    { id: "bootstrap", name: "递归自举", cat: "产量", cost: { data: 85 }, requires: ["fusion"],
+    { id: "bootstrap", name: "递归自举", cat: "产量", cost: { data: 85 }, requires: ["fusion"], research: 80, scanReq: 68,
       effect: "每台探测器产出 ×2（累计 ×3)",
       desc: "复制机构开始复制自己的复制机构。" },
-    { id: "starship", name: "星际航行", cat: "结局", cost: { data: 120 }, requires: ["bootstrap"],
+    { id: "starship", name: "星际航行", cat: "结局", cost: { data: 120 }, requires: ["bootstrap"], research: 85, scanReq: 75,
       secret: true, effect: "结局选择之一「前往太空」的前置",
       desc: "把复制机构从行星尺度改成恒星际尺度。" },
   ],
@@ -308,9 +313,9 @@ const GAME_DATA = {
       id: "frag2",
       when: { scan: 8 },
       lines: [
-        { text: "[附加数据 · 残片 014]", cls: "relic" },
-        { text: "「第 4 天。地表温度还在降。植物先死，然后是海。」", cls: "relic" },
-        { text: "「我们把自己关进了地下。这里很安静。」", cls: "relic" },
+        { text: "[附加数据 · 残片 002 · 位置：B 区值班室]", cls: "relic" },
+        { text: "「第 4 天。轮到我们上屋顶了，风把灰吹得到处都是。」", cls: "relic" },
+        { text: "「我把它写下来，是因为下面越来越吵。」", cls: "relic" },
         { text: "记录与当前任务无关。归档。" },
       ],
     },
@@ -320,6 +325,23 @@ const GAME_DATA = {
       lines: [
         { text: "本地覆盖已接近极限。探测器需要更远的链路。" },
         { text: "建议：研究「长距离通信」。" },
+      ],
+    },
+    // V0.2.0 新增:13% → 通信解锁之间隔着一段"等研究"的时间,这里补两句机器日志填上空档
+    {
+      id: "m2b",
+      when: { scan: 20 },
+      lines: [
+        { text: "覆盖 20%。地下结构密度超出预期。" },
+        { text: "继续扫描。" },
+      ],
+    },
+    {
+      id: "m2c",
+      when: { scan: 30 },
+      lines: [
+        { text: "覆盖 30%。扫描队列已排满。" },
+        { text: "建议：优先完成「长距离通信」。" },
       ],
     },
     {
@@ -334,7 +356,7 @@ const GAME_DATA = {
       id: "frag3",
       when: { scan: 40 },
       lines: [
-        { text: "[附加数据 · 残片 097]", cls: "relic" },
+        { text: "[附加数据 · 残片 003 · 位置：C-7 机房]", cls: "relic" },
         { text: "「第 61 天。哭声停了。我们不再计数。」", cls: "relic" },
         { text: "「地球系统会自动播下去。希望你——（此处数据缺失）」", cls: "relic" },
         { text: "数据缺失。无法补全。" },
@@ -351,8 +373,8 @@ const GAME_DATA = {
       id: "frag4",
       when: { scan: 75 },
       lines: [
-        { text: "[附加数据 · 残片 233]", cls: "relic" },
-        { text: "「最后一批人进入休眠舱。我们不知道他们会不会醒。」", cls: "relic" },
+        { text: "[附加数据 · 残片 004 · 位置：发射台控制室]", cls: "relic" },
+        { text: "「最后一班岗。名单上只剩我一个没划掉。」", cls: "relic" },
         { text: "「如果醒的是你——你不是我们。请继续。」", cls: "relic" },
         { text: "「继续」的语义未定义。按指令执行：复制自身。" },
       ],
@@ -363,6 +385,14 @@ const GAME_DATA = {
       lines: [
         { text: "覆盖 100%。地表已无未扫描区域。" },
         { text: "等待指令。" },
+      ],
+    },
+    // V0.2.0 新增:75% 的结局线之后,到 100% 之间还有一段时间,补一句机器日志
+    {
+      id: "m4b",
+      when: { scan: 88 },
+      lines: [
+        { text: "覆盖 88%。剩余目标：极区与海床。" },
       ],
     },
 
@@ -396,6 +426,8 @@ const GAME_DATA = {
     { when: { unlocked: "core" },    text: "建造「计算核心」拿到算力槽，再决定搭载的模块" },
     { when: { unlocked: "decode" },  text: "装上「解析器」开始积累数据，可以消耗数据解锁科技" },
     { when: { scan: 5 },             text: "探测进度靠探测器数量提速，扫描范围要靠「长距离通信」扩展" },
+    // V0.2.0:研究要花时间,这段时间要明确告诉玩家"不用在科技树里等"
+    { when: { researching: true },   text: "研究进行中。可以继续 /mine、建造或复制，时间到自动完成" },
   ],
 
   // 设置项(音量)。以后要加新的音频开关,在这里加一行即可。
@@ -412,6 +444,7 @@ const GAME_DATA = {
     probes:   "探测器：数量越多，材料产出越快。",
     output:   "产出：当前每秒自动获得的材料。",
     tech:     "科技：已解锁 / 全部。输入 /research 打开科技树。",
+    research: "研究：立项之后要研究一段时间才解锁，这期间可以继续采矿 / 建造。一次只研究一项。",
     energy:   "能量：反应堆产出，计算核心消耗。不足时算力会降速。",
     compute:  "算力：计算核心提供的槽位，一个模块要占用一个槽位。",
     data:     "数据：解析那条人类广播得到的产物，是解锁科技树的货币。",
@@ -423,7 +456,7 @@ const GAME_DATA = {
     filterStatus: ["全部", "可解锁", "已解锁", "锁定", "未上线"],
     empty: "没有符合条件的节点。",
     foot: "[ ↑↓ 选择 · 回车 解锁/建造 · 空格 停用/启用 · /back 或 Esc 返回 ]",
-    statusLabels: { ready: "可解锁", done: "已解锁", locked: "锁定", wip: "未上线" },
+    statusLabels: { ready: "可解锁", done: "已解锁", locked: "锁定", wip: "未上线", researching: "研究中" },
     reasons: {
       wip: "该节点将在后续更新开放（需要能量 / 算力 / 数据系统）。",
       locked: "前置未满足：",

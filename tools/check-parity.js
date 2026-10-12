@@ -45,6 +45,7 @@ cmp('scanK / scanK', G.numbers.scanK, sim.scanK);
 cmp('scanFalloff / scanFalloff', G.numbers.scanFalloff, sim.scanFalloff);
 cmp('scanNoCommMul / scanNoCommMul', G.numbers.scanNoCommMul, sim.scanNoCommMul);
 cmp('scanDecoderBonus / scanDecoderBonus', G.numbers.scanDecoderBonus, sim.scanDecoderBonus);
+cmp('scanResearchMul / scanResearchMul', G.numbers.scanResearchMul, sim.scanResearchMul);
 
 // —— 建筑 / 模块 ——
 cmp('仓库 cost / whCost', find(G.buildings, 'warehouse').cost.material, sim.whCost);
@@ -70,6 +71,20 @@ for (const id of ['click_mine', 'click_rep', 'reactor', 'core', 'decode', 'drone
   'autorep', 'probe_eff', 'core_eff', 'decode_eff', 'fusion', 'bootstrap', 'starship']) {
   const res = techCost(id, 'material') ? 'material' : 'data';
   cmp('科技 ' + id + '(' + res + ')', techCost(id, res), simTechCost(id, res));
+  // V0.2.0:研究秒数 + 扫描门槛也要一一对上(它们是节奏的主要旋钮,更不该两边各写一份)
+  // 注意:TECHS 的每一项里还嵌着 cost: { ... } 的 "}",所以先用 id 把该项切出来再匹配
+  const simField = function (field) {
+    const start = simSrc.indexOf("{ id: '" + id + "'");
+    if (start < 0) return NaN;
+    const eol = simSrc.indexOf("\n", start);
+    const line = simSrc.slice(start, eol < 0 ? simSrc.length : eol);
+    const m = line.match(new RegExp(field + ": ([0-9.]+)"));
+    return m ? Number(m[1]) : NaN;
+  };
+  const t = find(G.techs, id);
+  cmp('科技 ' + id + ' research', t.research, simField('research'));
+  // 没写 scanReq = 0(没有扫描门槛),两边都按 0 比
+  cmp('科技 ' + id + ' scanReq', (t.scanReq || 0), (simField('scanReq') || 0));
 }
 
 console.log(bad ? '\n✗ 有 ' + bad + ' 项不一致 —— 改完记得同步 tools/economy-sim.js 与文档'

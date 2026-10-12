@@ -69,6 +69,9 @@ function run() {
         await sleep(80);
         doc.getElementById('tech-list').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         await sleep(150);
+        // V0.2.0:科技要先立项再研究;测试直接拨到过去并立刻结算,不等那 20~85 秒
+        peek('if (game.research) { game.research.startSec = game.timeSec - 9999; advanceResearch(); }');
+        await sleep(150);
       };
       // 按"节点身份"选中再回车:比按名字找行更稳(同名科技 / 建筑各一行)
       const actKey = async function (key) {
@@ -76,6 +79,8 @@ function run() {
         await sleep(100);
         doc.getElementById('tech-list').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         await sleep(160);
+        peek('if (game.research) { game.research.startSec = game.timeSec - 9999; advanceResearch(); }');
+        await sleep(150);
       };
 
       await sleep(300);
@@ -103,7 +108,9 @@ function run() {
       const buildOk = await waitFor(() => lines().some((l) => l.indexOf('> 建造 反应堆') === 0 && l.indexOf('×2') >= 0), 25000);
       ok('建造折叠:同一行里看到 ×2', buildOk,
         lines().filter((l) => l.indexOf('建造') > 0).join(' | '));
-      const unlockOk = await waitFor(() => lines().some((l) => l.indexOf('> 解锁 反应堆') === 0 && l.indexOf('可建造') > 0), 25000);
+      // V0.2.0:解锁分两步(> 立项 X —— 研究 N 秒 / > 研究完成 X —— 效果),都只占一行
+      const unlockOk = await waitFor(() => lines().some((l) => l.indexOf('> 研究完成 反应堆') === 0 && l.indexOf('可建造') > 0)
+        && lines().some((l) => l.indexOf('> 立项 反应堆') === 0), 25000);
       ok('解锁只占一行(带效果)', unlockOk,
         lines().filter((l) => l.indexOf('解锁') >= 0).slice(-2).join(' | '));
       // 材料不足:连点 5 次只留一行

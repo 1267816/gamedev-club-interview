@@ -87,6 +87,9 @@ function run() {
       ok('攒够材料后 [ 解锁 ] 自动变可用', !doc.querySelector('#tech-detail .unlock-btn').disabled);
       doc.querySelector('#tech-detail .unlock-btn').click();
       await sleep(200);
+      // V0.2.0:点 [ 解锁 ] = 立项;把研究拨到过去让它当场完成
+      peek('if (game.research) { game.research.startSec = game.timeSec - 9999; advanceResearch(); }');
+      await sleep(200);
       ok('点它就能解锁(不用来回切视图)', peek('game.unlocked').indexOf('reactor') >= 0);
 
       console.log('\n【B. 筛选高亮(bug 2 / bug 6)】');

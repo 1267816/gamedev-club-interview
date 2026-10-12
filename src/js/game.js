@@ -26,6 +26,7 @@ const game = {
   achievements: [],     // 已获得的成就 id(未获得的在封面不显示)
   importantLog: [],     // 重要消息(剧情 / 系统提示),存档时一并保存
   logHistory: [],       // 终端日志历史,刷新后原样恢复
+  research: null,       // V0.2.0:正在研究的项目 { id, startSec },一次只能研究一项
 };
 
 // 启动序列是否已打完(P1 引导、引导提示都要等它结束)
@@ -33,6 +34,10 @@ let bootDone = false;
 
 // 游戏是否在运行:封面、未开始时不流动
 let running = false;
+
+// V0.2.0:科技树里"终端有新消息"的提示。
+// 值为"从这一秒起终端有新消息"(null = 没有)。回来会让它清空 —— 见 markStoryPending / clearStoryPending。
+let storyPendingSince = null;
 
 // 由状态"算出来"的值,不存起来,每次现算,避免前后不一致
 const has = function (id) { return game.unlocked.indexOf(id) >= 0; };
@@ -80,6 +85,36 @@ function dataRate()    { return slotsFor('decoder') * D.numbers.decoderRate * ef
 
 // 复制的成本:10 × 1.10^(已经有的台数 - 1) —— V0.1.2 改成几何增长(bug 1 的修复)
 function probeCost() { return D.numbers.probeBaseCost * Math.pow(D.numbers.probeGrowth, game.probes - 1); }
+
+/* ---------- V0.2.0:研究要花时间(用户拍板 R3/R4) ----------
+   立项时先付掉材料 / 数据,然后"研究"进行 research 秒;这期间仍然可以采矿、建造、装模块,
+   所以等待不是空等 —— 玩家留在终端看着它推进,剧情也插在这段时间里播。
+   一次只研究一项;另一项要等它做完(界面上会说明"正在研究中")。            */
+function techOf(id) { return D.techs.find(function (t) { return t.id === id; }); }
+function researching() { return game.research ? techOf(game.research.id) : null; }
+function researchSecOf(t) { return (t && t.research) || 0; }
+function researchElapsed() {
+  if (!game.research) return 0;
+  return Math.max(0, game.timeSec - game.research.startSec);
+}
+// 0~1;没有在研究就是 1
+function researchProgress(t) {
+  const sec = researchSecOf(t || researching());
+  if (!sec) return 1;
+  return Math.min(1, researchElapsed() / sec);
+}
+// 剩余秒数(取整,向上)
+function researchLeft(t) {
+  const sec = researchSecOf(t || researching());
+  return Math.max(0, Math.ceil(sec - researchElapsed()));
+}
+
+// 这一项科技现在能不能立项:前置都解锁了、扫描门槛过了(V0.2.0 的扫描闸门)
+function techAvailable(t) {
+  if (t.requires.some(function (r) { return !has(r); })) return false;
+  if (t.scanReq != null && game.scan < t.scanReq) return false;
+  return true;
+}
 
 // 建筑 / 模块的第 n 个成本(几何增长)
 function buildCostOf(table, id, count) {
@@ -269,7 +304,9 @@ function tick() {
     const falloff = Math.max(0.25, 1 - game.scan / D.numbers.scanFalloff);
     // 解析器也在帮忙定位(它们本来就是在解析扫描数据):这样"投数据"的玩家探测不会掉队
     const decoderBonus = 1 + D.numbers.scanDecoderBonus * slotsFor('decoder');
-    game.scan = Math.min(100, game.scan + game.probes * D.numbers.scanK * decoderBonus * scanMul * falloff * dt);
+    // V0.2.0:研究进行中探测提速 —— 玩家在研究时要留在终端,这段"等待"就得有戏可看
+    const researchBonus = game.research ? D.numbers.scanResearchMul : 1;
+    game.scan = Math.min(100, game.scan + game.probes * D.numbers.scanK * decoderBonus * scanMul * falloff * researchBonus * dt);
   }
 
   // ⑥ 复制助手干的活也要让玩家看见(不然"材料怎么少了"没人解释)——
@@ -279,7 +316,10 @@ function tick() {
     repDone = 0;
   }
 
-  checkStory();                  // 数值一达标,剧情 / 引导就顺着打出来
+  advanceResearch();             // V0.2.0:研究进度;到时间就解锁并写日志
+  const told = checkStory();     // 数值一达标,剧情 / 引导就顺着打出来
+  if (told && techVisible) storyPendingSince = storyPendingSince == null ? game.timeSec : storyPendingSince;
+  updateTechPending();           // 科技树里那行"终端有新消息"
   checkAchievements();           // 探测进度 / 探测器数量这类"自己会涨"的条件也要一直盯着
   checkIdle();                   // 太久没动 → 指南系统提示一句
   updateTechLive();              // 科技树开着的时候,资源读数与按钮状态要跟着涨
@@ -370,6 +410,11 @@ function render() {
     row('算力', slotsUsed() + ' / ' + total + ' 槽' + (over ? '（超载！)' : ''), 'compute', over);
   }
   if (has('decode')) row('数据', fmtNum(game.data) + '(+' + dataRate().toFixed(2) + '/s)', 'data');
+  // V0.2.0:研究进行中就常驻一行进度 —— 玩家留在终端的主要原因就是看着它走
+  const rt = researching();
+  if (rt) {
+    row('研究', rt.name + ' ' + Math.round(researchProgress(rt) * 100) + '%（剩 ' + researchLeft(rt) + ' 秒)', 'research');
+  }
   row('科技', game.unlocked.length + ' / ' + D.techs.length, 'tech');
 
   const html = rows.join('');
@@ -400,10 +445,13 @@ function storyReady(when) {
   if (w.probes      != null && game.probes      < w.probes)      return false;
   if (w.timeSec     != null && game.timeSec     < w.timeSec)     return false;
   if (w.scan        != null && game.scan        < w.scan)        return false;
+  // V0.2.0:研究进行中的提示(写在 guideHints 里用)
+  if (w.researching != null && (!!game.research) !== !!w.researching) return false;
   return true;
 }
 
 // 扫一遍剧情表:新满足的节点按表内顺序打出来;一次可以连着触发多个(如 p2 → p3 → p4)
+// 返回:这一遍有没有真的打出新内容(V0.2.0:科技树要用它判断"终端有新消息")
 function checkStory() {
   let again = true;
   let guard = 0;
@@ -423,6 +471,7 @@ function checkStory() {
   }
   // 剧情可能改变了"哪些命令按钮该出现"(比如走到 75% 才有 /stay 与 /go)
   if (firedAny) buildCommands();
+  return firedAny;
 }
 
 // 旧存档没有剧情进度时的兜底:把"此刻已经该发生"的节点直接记为已触发,
@@ -652,8 +701,26 @@ const techSearchEl = document.getElementById('tech-search');
 const techStatusEl = document.getElementById('tech-status');
 const techCatsEl   = document.getElementById('tech-cats');
 const techCountEl  = document.getElementById('tech-count');
+const techPendingEl = document.getElementById('tech-pending');   // V0.2.0:"终端有新消息"
 
 let techVisible = false;                                       // 科技树是否正在显示
+
+// V0.2.0:科技树是独立整屏,剧情却打在终端里 —— 玩家在科技树里看不见。
+// 这里给科技树底部加一行"终端有新消息",回到终端就清掉(用户拍板 R6:只提示,不强制拉回去)
+function pendingNewMessages() {
+  return techVisible && storyPendingSince != null;
+}
+function markStoryPending() { if (storyPendingSince == null) storyPendingSince = game.timeSec; }
+function clearStoryPending() { storyPendingSince = null; }
+
+// 科技树底部那行:有快讯就显示(顺便把正在研究的项目也写在那里,免得玩家去别处找)
+function updateTechPending() {
+  if (!techPendingEl) return;
+  const on = pendingNewMessages();
+  // 单独一行,不抢"操作提示"那一行 —— 否则解锁失败等提示会被盖掉(自测里真踩到过)
+  techPendingEl.classList.toggle('hidden', !on);
+  if (on) techPendingEl.textContent = '▲ 终端有新消息 —— 按 /back 或 Esc 回去看';
+}
 // 选中项用"节点身份"记住(kind:id),不用列表序号 —— 列表因为筛选/状态变化重排时,
 // 序号会指向别的节点,玩家按回车就买错东西(自测里真的踩到过)
 let techSelKey = 'tech:click_mine';
@@ -679,6 +746,7 @@ function viewNodes() {
     out.push({ kind: 'tech', id: t.id, name: t.name, cat: t.cat, cost: t.cost,
       effect: t.effect, desc: t.desc, status: techStatusOf(t), requires: t.requires,
       wip: !!t.wip, secret: !!t.secret && !has(t.id),
+      scanReq: t.scanReq,   // V0.2.0:详情里要写"探测进度 N%"这道门
       unlockBuilding: t.unlockBuilding, unlockModule: t.unlockModule });   // 效果文字要用它们
     for (const b of D.buildings) if (b.unlockedBy === t.id) out.push(buildNode(b, 'building'));
     for (const m of D.modules)   if (m.unlockedBy === t.id) out.push(buildNode(m, 'module'));
@@ -705,9 +773,36 @@ function buildNode(x, kind) {
 // 科技节点状态:done 已解锁 / ready 可解锁(前置满足) / locked 前置没满足 / wip 还没上线
 function techStatusOf(t) {
   if (has(t.id)) return 'done';
+  if (game.research && game.research.id === t.id) return 'researching';   // V0.2.0:正在研究中
   if (t.wip) return 'wip';
-  if (t.requires.some(function (r) { return !has(r); })) return 'locked';
+  if (!techAvailable(t)) return 'locked';   // 前置没到 / 扫描进度没到(V0.2.0)
   return 'ready';
+}
+
+// ---------- V0.2.0:研究流程 + 科技树那行"终端有新消息" ----------
+// 研究推进:到点就解锁(用"当前游戏时间 − 立项时间"算,不依赖真实时间戳,存档也不怕)
+function advanceResearch() {
+  const t = researching();
+  if (!t) return;
+  if (researchElapsed() < researchSecOf(t)) return;
+
+  game.research = null;
+  game.unlocked.push(t.id);
+  log('> 研究完成 ' + t.name + ' —— ' + t.effect,
+    { cls: 'cmd', instant: true, important: true, group: 'tech-done-' + t.id });
+  // 研究可能改变"哪些命令按钮该出现"(比如解锁 /mine 的点击按钮)
+  buildCommands();
+  renderTechFilters();     // 「结局」那一栏的问号要在这里恢复成文字
+  checkAchievements();
+  renderTech();
+}
+
+// 调试 / 自测用:把正在研究的项目往前推 n 秒(不写进界面,只是给 tools/checks 用,
+// 免得自测为了等一项研究真的坐等 20~85 秒)。玩家正常玩不会用到它。
+function debugAdvanceResearch(sec) {
+  if (!game.research) return;
+  game.research.startSec -= Number(sec) || 0;
+  advanceResearch();
 }
 
 function resName(id) {
@@ -745,7 +840,12 @@ function statusTab(node) {
 
 // 状态在列表里显示成什么字
 function statusLabelOf(node) {
-  if (node.kind === 'tech') return D.techView.statusLabels[node.status];
+  if (node.kind === 'tech') {
+    if (node.status === 'researching') {
+      return '研究中 ' + Math.round(researchProgress(techOf(node.id)) * 100) + '%';
+    }
+    return D.techView.statusLabels[node.status];
+  }
   if (node.status === 'locked') return "锁定";
   if (node.status === 'noslot') return "槽位已满";
   if (node.status === 'stopped') return "已停止";
@@ -843,21 +943,34 @@ function renderTechDetail() {
     return (x ? x.name : r) + (has(r) ? '（已解锁）' : '（未解锁）');
   });
   const preLine = node.kind === 'tech'
-    ? '<div class="d-line">前置：' + (preNames.length ? preNames.join('、') : '无') + '</div>'
+    ? '<div class="d-line">前置：' + (preNames.length ? preNames.join('、') : '无')
+      // V0.2.0:扫描门槛也写在"前置"里(它是和前置科技同等地位的一道门)
+      + (node.scanReq != null
+          ? '、探测进度 ' + node.scanReq + '%（现在 ' + game.scan.toFixed(1) + '%）'
+          : '')
+      + '</div>'
     : '<div class="d-line">前置：科技「' + (function () {
         const x = D.techs.find(function (y) { return y.id === node.unlockedBy; });
         return (x ? x.name : node.unlockedBy) + '」' + (has(node.unlockedBy) ? '（已解锁）' : '（未解锁）');
       })() + '</div>';
+  // V0.2.0:立项之后要研究一段时间;这里把进度条和剩余秒数写在最显眼的地方
+  const researchLine = (node.kind === 'tech' && node.status === 'researching')
+    ? '<div class="d-line d-research">研究中：'
+      + Math.round(researchProgress(techOf(node.id)) * 100) + '%　剩 ' + researchLeft(techOf(node.id)) + ' 秒</div>'
+    : '';
   techDetailEl.innerHTML =
       '<div class="d-line"><span class="d-name">' + node.name + '</span> · ' + node.cat + ' · '
-      + statusLabelOf(node) + built + (done ? '' : ' · ' + costText(nodeCost(node))) + '</div>'
+      + statusLabelOf(node) + built + (done ? '' : ' · ' + costText(nodeCost(node))
+        + (node.kind === 'tech' && node.research ? ' · 研究 ' + node.research + ' 秒' : '')) + '</div>'
     + '<div class="d-line">效果：' + effectTextOf(node) + '</div>'
     + '<div class="d-line">' + descTextOf(node) + '</div>'
     + preLine
+    + researchLine
     + '<div class="d-line" id="tech-action"></div>';
   const btn = document.createElement('button');
   btn.className = 'unlock-btn';
-  btn.textContent = done ? '[ 已解锁 ]' : (node.kind === 'tech' ? '[ 解锁 ]' : '[ 建造 ]');
+  btn.textContent = done ? '[ 已解锁 ]'
+    : (node.kind === 'tech' ? (node.status === 'researching' ? '[ 研究中… ]' : '[ 立项研究 ]') : '[ 建造 ]');
   btn.disabled = !(node.status === 'ready' && nodeAffordable(node));
   btn.onclick = function () { tryNodeAction(node); };
   document.getElementById('tech-action').appendChild(btn);
@@ -873,6 +986,9 @@ function updateTechLive() {
   if (techActionBtn && node) {
     techActionBtn.disabled = !(node.status === 'ready' && nodeAffordable(node));
   }
+  // V0.2.0:研究百分比 / 剩余秒数每帧都在变,选中项的详情要跟着重画
+  // (没在研究时不动 DOM,免得玩家点不到正在点的东西 —— 这是 V0.1.3 的教训)
+  if (game.research && node && node.kind === 'tech') renderTechDetail();
 }
 
 function renderTech() {
@@ -917,14 +1033,29 @@ function tryNodeAction(node) {
 
 function tryUnlockTech(node) {
   if (node.status === 'done') { techHint(node.name + ' 已经解锁了。'); return; }
+  if (node.status === 'researching') {
+    techHint('「' + node.name + '」正在研究中：还剩 ' + researchLeft(techOf(node.id)) + ' 秒。');
+    return;
+  }
   if (node.status === 'wip')  { techHint(D.techView.reasons.wip); return; }
+  // V0.2.0:一次只研究一项。别的项要排队 —— 免得玩家一口气把科技点完(用户报的"2~3 分钟点完")
+  if (game.research) {
+    const r = researching();
+    techHint('「' + r.name + '」还在研究中(剩 ' + researchLeft(r) + ' 秒)。一次只研究一项。');
+    log('研究中：' + r.name + '（剩 ' + researchLeft(r) + ' 秒）', { cls: 'err', instant: true, group: 'busy' });
+    return;
+  }
   if (node.status === 'locked') {
+    // 前置和扫描门槛是两种不同的"锁",要分开说 —— 不然玩家会去查前置、查半天不知道是探测不够
     const miss = node.requires.filter(function (r) { return !has(r); })
-      .map(function (r) {
-        const x = D.techs.find(function (y) { return y.id === r; });
-        return x ? x.name : r;
-      });
-    techHint(D.techView.reasons.locked + miss.join("、"));
+      .map(function (r) { const x = techOf(r); return x ? x.name : r; });
+    if (miss.length) {
+      techHint(D.techView.reasons.locked + miss.join("、"));
+      return;
+    }
+    techHint('探测进度不够：需要 ' + node.scanReq + '%，现在是 ' + game.scan.toFixed(1) + '%。');
+    log('探测不足：需要 ' + node.scanReq + '%，现在 ' + game.scan.toFixed(1) + '%',
+      { cls: 'err', instant: true, group: 'poor' });
     return;
   }
   if (overCapText(node)) {
@@ -939,17 +1070,17 @@ function tryUnlockTech(node) {
     return;
   }
 
+  // V0.2.0:付掉花费 = 立项;真正解锁要等研究完成(advanceResearch 里做)
   payCost(node.cost);
-  game.unlocked.push(node.id);
-  techHint('已解锁：' + node.name + '。');
+  game.research = { id: node.id, startSec: game.timeSec };
+  const sec = researchSecOf(node);
+  techHint('已立项：' + node.name + '（研究 ' + sec + ' 秒）。');
   // 一行说完:命令 + 效果(instant + 折叠);剧情才用打字机慢慢打(用户要求 5)
-  log('> 解锁 ' + node.name + ' —— ' + node.effect,
+  log('> 立项 ' + node.name + ' —— 研究 ' + sec + ' 秒',
     { cls: 'cmd', instant: true, important: true, group: 'tech-' + node.id });
   noteAction();
   checkAchievements();
-  keepSelectionOn(node.id, node.kind);   // 解锁后列表会重排:把选中项钉在刚解锁的节点上
-  buildCommands();            // 解锁后可能要出现新的点击按钮
-  renderTechFilters();        // 「结局」这一栏的问号要在这里恢复成文字(用户报的 bug)
+  keepSelectionOn(node.id, node.kind);   // 立项后列表会重排:把选中项钉在这个节点上
   renderTech();
   render();
 }
@@ -1025,23 +1156,29 @@ function keepSelectionOn(id, kind) {
 function openTech() {
   techVisible = true;
   techSelKey = '';   // 打开时默认选列表第一项
+  // 打开科技树就先清掉"终端有新消息"(玩家刚看过终端;只有**打开之后**新触发的才算新消息)
+  clearStoryPending();
   hideAllPalettes();
   showScreen('tech');
   techSearchEl.value = techFilter.text;
   renderTechFilters();
   renderTech();
   techHint(D.techView.foot);
+  updateTechPending();
   techListEl.focus();
 }
 
 function closeTech() {
   techVisible = false;
+  clearStoryPending();   // 回到终端 = 消息已经看到了
+  if (techPendingEl) techPendingEl.classList.add('hidden');
   hideAllPalettes();
   showScreen('game');
   techHint('');
   cmdInput.focus();
   paintHint();
 }
+
 
 // 科技树里的键盘:↑↓ 选择、回车解锁、PageUp/Down 翻页、Home/End 到头、Esc 返回
 techListEl.addEventListener('keydown', function (e) {
@@ -1306,6 +1443,7 @@ function snapshot() {
     commandsRun: game.commandsRun,
     fired:    game.fired,
     unlocked: game.unlocked,
+    research: game.research,   // V0.2.0:正在研究哪一项 / 什么时候开始的
     achievements: game.achievements,
     importantLog: game.importantLog,
     logHistory: game.logHistory,
@@ -1351,6 +1489,9 @@ function applySave(d) {
   game.timeSec  = Number(d.timeSec)  || 0;
   game.commandsRun = Number(d.commandsRun) || 0;
   game.unlocked = Array.isArray(d.unlocked) ? d.unlocked : [];
+  // V0.2.0:正在研究的项目。老存档没有这个字段 → null(没在研究)
+  game.research = (d.research && typeof d.research.id === 'string' && isFinite(d.research.startSec))
+    ? { id: d.research.id, startSec: Number(d.research.startSec) } : null;
   mergeAchievements(Array.isArray(d.achievements) ? d.achievements : []);   // 成就只增不减
   mergeAchievements(readAccountAchievements());
   game.importantLog = Array.isArray(d.importantLog) ? d.importantLog : [];
@@ -1422,6 +1563,8 @@ function resetGame() {
   game.commandsRun = 0;
   game.fired    = [];
   game.unlocked = [];
+  game.research = null;          // V0.2.0:新档没有正在研究的项目
+  clearStoryPending();
   // 注意:**不重置成就** —— 它们是账号级的(换新档、开新游戏都保留)
   game.importantLog = [];
   game.logHistory = [];

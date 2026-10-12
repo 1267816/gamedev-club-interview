@@ -98,14 +98,19 @@ async function main() {
   ok('科技树:1400×900 下列表可滚动(20 行放不下)', await js("(function(){var l=document.getElementById('tech-list');return l.scrollHeight>l.clientHeight;})()"),
     '内容高 ' + await js("document.getElementById('tech-list').scrollHeight") + ' / 容器高 ' + await js("document.getElementById('tech-list').clientHeight"));
 
-  // 解锁「手动控制」,看选中项是否钉住 + 按钮状态
-  await js("(function(){var r=[].slice.call(document.querySelectorAll('#tech-list .tech-item')).find(function(x){return x.textContent.indexOf('手动控制')===0});r.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}));})()");
+  // 立项「简单采集」,看选中项是否钉住 + 按钮状态(V0.2.0:解锁 = 立项 → 研究 → 完成)
+  await js("(function(){var r=[].slice.call(document.querySelectorAll('#tech-list .tech-item')).find(function(x){return x.textContent.indexOf('简单采集')===0});r.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}));})()");
   await sleep(200);
   await js("document.querySelector('#tech-detail .unlock-btn').click()");
   await sleep(600);
-  ok('解锁后选中项仍是刚解锁的节点',
+  ok('立项后选中项仍是这个节点',
     (await js("(document.querySelector('#tech-list .tech-item.active')||{}).textContent||''")).indexOf('简单采集') === 0,
     await js("(document.querySelector('#tech-list .tech-item.active')||{}).textContent"));
+  ok('立项后按钮变成 [ 研究中… ] 且禁用', await js("document.querySelector('#tech-detail .unlock-btn').textContent") === '[ 研究中… ]'
+    && await js("document.querySelector('#tech-detail .unlock-btn').disabled"),
+    await js("document.querySelector('#tech-detail .unlock-btn').textContent"));
+  await js("debugAdvanceResearch(9999)");
+  await sleep(400);
   ok('解锁按钮变 [ 已解锁 ] 且禁用', await js("document.querySelector('#tech-detail .unlock-btn').textContent") === '[ 已解锁 ]'
     && await js("document.querySelector('#tech-detail .unlock-btn').disabled"));
   ok('出现 [ /mine ] 按钮', await js("!!document.getElementById('btn-mine')"));
