@@ -267,7 +267,9 @@ function tick() {
   if (game.scan < 100) {
     const scanMul = has('comm') ? 1 : D.numbers.scanNoCommMul;
     const falloff = Math.max(0.25, 1 - game.scan / D.numbers.scanFalloff);
-    game.scan = Math.min(100, game.scan + game.probes * D.numbers.scanK * scanMul * falloff * dt);
+    // 解析器也在帮忙定位(它们本来就是在解析扫描数据):这样"投数据"的玩家探测不会掉队
+    const decoderBonus = 1 + D.numbers.scanDecoderBonus * slotsFor('decoder');
+    game.scan = Math.min(100, game.scan + game.probes * D.numbers.scanK * decoderBonus * scanMul * falloff * dt);
   }
 
   // ⑥ 复制助手干的活也要让玩家看见(不然"材料怎么少了"没人解释)——
@@ -326,7 +328,9 @@ function fmtTime(sec) {
 function fmtNum(n) {
   if (!isFinite(n)) return '∞';
   const abs = Math.abs(n);
-  if (abs < 1000) return n < 10 ? (Math.round(n * 10) / 10).toFixed(1) : String(Math.floor(n));
+  // 100 以下保留一位小数(用户报过"12.5 只显示 12");再大就取整,免得读数一直在跳
+  if (abs < 100) return String(Math.round(n * 10) / 10);
+  if (abs < 1000) return String(Math.floor(n));
   const units = ['K', 'M', 'B', 'T', 'Qa', 'Qi'];
   let v = n, i = -1;
   while (Math.abs(v) >= 1000 && i < units.length - 1) { v /= 1000; i++; }
@@ -820,7 +824,10 @@ function effectTextOf(node) {
   const m = D.modules.find(function (x) { return x.id === node.unlockModule; });
   if (b) parts.push('可建造「' + b.name + '」：' + b.effect);
   if (m) parts.push('可安装「' + m.name + '」：' + m.effect);
-  return parts.length ? parts.join(';') : node.effect;
+  // 用户要自己写效果文字(比如只留"可建造「反应堆」")—— 他写了就以他的为准;
+  // 只有数据表里没写时,才自动引用建筑 / 模块的效果兜底(避免两处数字越改越不一致)
+  if (!parts.length) return node.effect;
+  return node.effect ? node.effect : parts.join('；');
 }
 function descTextOf(node) { return node.secret ? '???' : node.desc; }
 
@@ -942,6 +949,7 @@ function tryUnlockTech(node) {
   checkAchievements();
   keepSelectionOn(node.id, node.kind);   // 解锁后列表会重排:把选中项钉在刚解锁的节点上
   buildCommands();            // 解锁后可能要出现新的点击按钮
+  renderTechFilters();        // 「结局」这一栏的问号要在这里恢复成文字(用户报的 bug)
   renderTech();
   render();
 }
@@ -1091,6 +1099,7 @@ function checkAchievements() {
     if (game.achievements.indexOf(a.id) >= 0) continue;
     if (!achReady(a)) continue;
     game.achievements.push(a.id);
+    writeAccountAchievements();   // 立刻落盘:成就是账号级的,不跟着存档走
     // 一行搞定:成就最容易刷屏,别再占第二行(描述放进「以前的信息」里也能看到)
     log('你获得了一个成就：' + a.name + ' —— ' + a.desc, { cls: 'ach', important: true });
   }
@@ -1247,6 +1256,28 @@ function checkIdle() {
 
 /* ---------- 存档:localStorage ---------- */
 const SAVE_KEY = 'vn-01-save';
+// 成就是"账号级"的:换新档不会清空、也不会被新档覆盖(用户报过"新存档把成就洗掉了")
+const ACH_KEY = 'vn-01-achievements';
+
+function readAccountAchievements() {
+  try {
+    const raw = localStorage.getItem(ACH_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) { return []; }
+}
+
+function writeAccountAchievements() {
+  try { localStorage.setItem(ACH_KEY, JSON.stringify(game.achievements)); } catch (e) { /* 忽略 */ }
+}
+
+// 把两边的成就合并(只增不减)
+function mergeAchievements(list) {
+  for (const id of (list || [])) {
+    if (game.achievements.indexOf(id) < 0) game.achievements.push(id);
+  }
+}
+
 let autoSaveTimer = null;
 
 function readSave() {
@@ -1320,7 +1351,8 @@ function applySave(d) {
   game.timeSec  = Number(d.timeSec)  || 0;
   game.commandsRun = Number(d.commandsRun) || 0;
   game.unlocked = Array.isArray(d.unlocked) ? d.unlocked : [];
-  game.achievements = Array.isArray(d.achievements) ? d.achievements : [];
+  mergeAchievements(Array.isArray(d.achievements) ? d.achievements : []);   // 成就只增不减
+  mergeAchievements(readAccountAchievements());
   game.importantLog = Array.isArray(d.importantLog) ? d.importantLog : [];
   game.logHistory   = Array.isArray(d.logHistory)   ? d.logHistory   : [];
   // 旧存档(V0.1.0 之前)没有剧情进度:把"此刻已经该发生"的节点记为已触发,避免读档瞬间刷屏
@@ -1390,7 +1422,7 @@ function resetGame() {
   game.commandsRun = 0;
   game.fired    = [];
   game.unlocked = [];
-  game.achievements = [];
+  // 注意:**不重置成就** —— 它们是账号级的(换新档、开新游戏都保留)
   game.importantLog = [];
   game.logHistory = [];
   game.lastTick = Date.now();
@@ -1646,9 +1678,8 @@ bindCmdInput(techInput, techPalette);   // 科技树里的命令入口(/back 用
 
 const savedSession = readSave();
 // 停在封面时也把存档里的成就读进来 —— 否则"大退重进"后封面成就页是空的(用户报的 bug 1)
-if (savedSession && Array.isArray(savedSession.achievements)) {
-  game.achievements = savedSession.achievements.slice();
-}
+mergeAchievements(readAccountAchievements());
+if (savedSession && Array.isArray(savedSession.achievements)) mergeAchievements(savedSession.achievements);
 if (isReload && savedSession && savedSession.active) {
   resumeSession(savedSession);            // 刷新:把整屏内容原样接上
 } else {

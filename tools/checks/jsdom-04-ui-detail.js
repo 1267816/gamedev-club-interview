@@ -326,8 +326,9 @@ function run() {
       ok('读档后成就还在', peek('game.achievements').length === 3);
       ok('读档出现「以前的信息」', lines().some((l) => l.indexOf('以前的信息') >= 0));
       peek("applySave({ material: 5, probes: 6, timeSec: 60, fired: [] })");
-      ok('旧档(无 unlocked/achievements 字段)不报错', peek('game.unlocked').length === 0
-        && peek('game.achievements').length === 0);
+      ok('旧档(无 unlocked/achievements 字段)不报错、unlocked 归零', peek('game.unlocked').length === 0);
+      ok('旧档不会清空成就(V0.1.5 起成就是账号级的)', peek('game.achievements').length > 0,
+        String(peek('game.achievements').length));
       peek('checkAchievements()');
       ok('旧档续玩会补发已达成的成就', peek('game.achievements').indexOf('first_rep') >= 0,
         got());
@@ -349,7 +350,7 @@ function run() {
       ok('第一次复制触发剧情 p2/p3/p4', peek('game.fired').indexOf('p4') >= 0, JSON.stringify(peek('game.fired')));
       const boot = await waitFor(() => peek('game.fired').indexOf('p1') >= 0, 3000);
       ok('启动引导 P1 仍触发', boot);
-      ok('新档成就从 0 开始', peek('game.achievements').indexOf('first_tech') < 0);
+      ok('开新档不会清空成就', peek('game.achievements').length > 0, String(peek('game.achievements').length));
 
       console.log('\n【M. 控制台】');
       ok('无任何报错', errors.length === 0, JSON.stringify(errors));

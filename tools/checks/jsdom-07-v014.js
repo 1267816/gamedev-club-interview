@@ -135,8 +135,10 @@ function run() {
       ok('采集助手写明"占 1 个算力槽"', droneRow.textContent.indexOf('算力槽') >= 0, droneRow.textContent.slice(0, 60));
       ok('采集助手数值 = 每台探测器 +0.12 材料/秒', droneRow.textContent.indexOf('0.12') >= 0);
       const droneTechRow = rows().find((r) => r.textContent.indexOf('无人采集') === 0);
-      ok('解锁文本直接引用模块效果(不会各写各的)',
-        droneTechRow.textContent.indexOf('0.12') >= 0 && droneTechRow.textContent.indexOf('算力槽') >= 0,
+      // V0.1.5:用户要自己写这句(只留"可安装「采集助手」"),所以数据表里有文字就以它为准;
+      // 数字的唯一来源是模块那一行(上面的断言已经覆盖)
+      ok('解锁文本用数据表里写的那一句(不自动追加)',
+        droneTechRow.textContent.indexOf('可安装「采集助手」') >= 0,
         droneTechRow.textContent.slice(0, 70));
 
       console.log('\n【要求 4 + bug 2:科技树右侧就是终端那块读数】');

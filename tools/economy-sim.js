@@ -51,6 +51,7 @@ const P = {
   scanK: Number.isFinite(Number(process.argv[2])) ? Number(process.argv[2]) : 0.008,
   scanFalloff: 200,      // 覆盖率衰减:速率 × (1 − 进度/200)
   scanNoCommMul: 0.2,    // 未解锁长距离通信:只能扫基地附近
+  scanDecoderBonus: 0.12, // 每个在跑的解析器让探测速率 ×(1+0.12)
 
   // ---- 玩家行为模型 ----
   manualMineSec: 90,     // 前 90 秒按 1 次/秒手动 /mine
@@ -152,7 +153,8 @@ function physical(s, dt) {
   }
   const scanMul = s.unlocked.comm ? 1 : P.scanNoCommMul;
   const falloff = Math.max(0.25, 1 - s.scan / P.scanFalloff);
-  s.scan = Math.min(s.scan + s.probes * P.scanK * scanMul * falloff * dt, 100);
+  const decoderBonus = 1 + P.scanDecoderBonus * s.decoders;   // 解析器也在帮忙定位
+  s.scan = Math.min(s.scan + s.probes * P.scanK * decoderBonus * scanMul * falloff * dt, 100);
 
   return { matRate, gross, need, slots, scale, cap };
 }

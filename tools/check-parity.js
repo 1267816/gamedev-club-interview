@@ -44,6 +44,7 @@ cmp('warehouseMul / whCapMul', G.numbers.warehouseMul, sim.whCapMul);
 cmp('scanK / scanK', G.numbers.scanK, sim.scanK);
 cmp('scanFalloff / scanFalloff', G.numbers.scanFalloff, sim.scanFalloff);
 cmp('scanNoCommMul / scanNoCommMul', G.numbers.scanNoCommMul, sim.scanNoCommMul);
+cmp('scanDecoderBonus / scanDecoderBonus', G.numbers.scanDecoderBonus, sim.scanDecoderBonus);
 
 // —— 建筑 / 模块 ——
 cmp('仓库 cost / whCost', find(G.buildings, 'warehouse').cost.material, sim.whCost);
