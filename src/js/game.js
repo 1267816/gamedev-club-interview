@@ -747,6 +747,7 @@ function viewNodes() {
       effect: t.effect, desc: t.desc, status: techStatusOf(t), requires: t.requires,
       wip: !!t.wip, secret: !!t.secret && !has(t.id),
       scanReq: t.scanReq,   // V0.2.0:详情里要写"探测进度 N%"这道门
+      research: t.research, // V0.2.0:立项要研究多少秒(漏了这个会让日志/提示都显示"研究 0 秒")
       unlockBuilding: t.unlockBuilding, unlockModule: t.unlockModule });   // 效果文字要用它们
     for (const b of D.buildings) if (b.unlockedBy === t.id) out.push(buildNode(b, 'building'));
     for (const m of D.modules)   if (m.unlockedBy === t.id) out.push(buildNode(m, 'module'));

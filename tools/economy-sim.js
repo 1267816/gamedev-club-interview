@@ -196,9 +196,10 @@ function decide(s, ph) {
   const tech = nextTech(s);
   if (tech && !s.research && aff(s, tech.cost) && s.t > 2) {
     pay(s, tech.cost); s.unlocked[tech.id] = s.t; applyTech(s, tech.id);
-    s.research = { id: tech.id, startSec: s.t, sec: tech.research || 0 };
+    const rsec = tech.research || 0;
+    s.research = { id: tech.id, startSec: s.t, sec: rsec };
     s.researchDone = s.researchDone || {};
-    s.researchDone[tech.id] = s.t + (tech.research || 0);
+    s.researchDone[tech.id] = s.t + rsec;
     s.log.push([s.t, 'tech', tech.id]);
     if (!keepWorking) return;   // 旧模型:立项后干等
   }

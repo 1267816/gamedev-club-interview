@@ -73,6 +73,14 @@ function run() {
         doc.querySelector('#tech-detail .unlock-btn').textContent);
       enter();
       await sleep(250);
+      // 用户报过:立项后日志与提示都写成"研究 0 秒" —— 根因是 viewNodes() 没把 research 带进视图节点
+      ok('立项日志里的秒数是真实值(不是 0)',
+        lines().some((l) => l === '> 立项 简单采集 —— 研究 ' + peek('techOf("click_mine").research') + ' 秒'),
+        lines().filter((l) => l.indexOf('立项') >= 0).slice(-1).join(' | '));
+      ok('提示行里的秒数也是真实值',
+        hint().indexOf('研究 ' + peek('techOf("click_mine").research') + ' 秒') >= 0, hint());
+      ok('视图节点带着 research 字段', peek('(function(){var n=viewNodes().find(function(x){return x.id==="click_mine";});return typeof n.research;})()') === 'number',
+        peek('(function(){var n=viewNodes().find(function(x){return x.id==="click_mine";});return String(n.research);})()'));
       ok('立项后 game.research 指向这一项', peek('game.research && game.research.id') === 'click_mine',
         String(peek('game.research && game.research.id')));
       ok('此刻还没解锁(要等研究完)', peek('game.unlocked').length === 0, JSON.stringify(peek('game.unlocked')));
