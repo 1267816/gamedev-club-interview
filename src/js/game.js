@@ -14,6 +14,8 @@ const game = {
   lastTick: Date.now(), // 上一次推进的真实时刻
   commandsRun: 0,       // 已执行命令数(剧情触发用)
   fired:    [],         // 已触发的剧情节点 id(剧情 / 引导见 game-data.js 的 story)
+  unlocked: [],         // 已解锁的科技 id(V0.1.1 起)
+  achievements: [],     // 已获得的成就 id(未获得的在封面不显示)
   importantLog: [],     // 重要消息(剧情 / 系统提示),存档时一并保存
   logHistory: [],       // 终端日志历史,刷新后原样恢复
 };
@@ -155,6 +157,7 @@ function tick() {
   game.timeSec += dt;
   game.material += perSecond() * dt;
   checkStory();                  // 数值一达标,剧情 / 引导就顺着打出来
+  checkIdle();                   // 太久没动 → 指南系统提示一句
   render();
 }
 
@@ -186,6 +189,17 @@ function fmtTime(sec) {
   return two(Math.floor(t / 3600)) + ':' + two(Math.floor(t / 60) % 60) + ':' + two(t % 60);
 }
 
+// 大数缩写:1000 以下照常显示;以上用 K / M / B / T …(1e15 之后 JS 精度就不可靠了)
+function fmtNum(n) {
+  if (!isFinite(n)) return '∞';
+  const abs = Math.abs(n);
+  if (abs < 1000) return n < 10 ? (Math.round(n * 10) / 10).toFixed(1) : String(Math.floor(n));
+  const units = ['K', 'M', 'B', 'T', 'Qa', 'Qi'];
+  let v = n, i = -1;
+  while (Math.abs(v) >= 1000 && i < units.length - 1) { v /= 1000; i++; }
+  return v.toFixed(2) + units[i];
+}
+
 function render() {
   // 顶栏:标题 + 计时 T+时:分:秒(未上线时都是问号)
   headerTitle.textContent = T(D.title);
@@ -196,11 +210,13 @@ function render() {
   const filled = Math.round(Math.min(1, game.material / need) * 12);
   const bar    = '█'.repeat(filled) + '░'.repeat(12 - filled);
 
+  const techUnlocked = game.unlocked.length;
   readoutEl.innerHTML =
-      '<div class="row" data-hint="' + D.panelHints.material + '"><span>' + T('材料') + '</span><b>' + T(String(Math.floor(game.material))) + '</b></div>'
+      '<div class="row" data-hint="' + D.panelHints.material + '"><span>' + T('材料') + '</span><b>' + T(fmtNum(game.material)) + '</b></div>'
     + '<div class="bar" data-hint="' + D.panelHints.progress + '">' + T(bar) + '</div>'
-    + '<div class="row" data-hint="' + D.panelHints.probes + '"><span>' + T('探测器') + '</span><b>' + T(game.probes + ' 台') + '</b></div>'
-    + '<div class="row" data-hint="' + D.panelHints.output + '"><span>' + T('产出') + '</span><b>' + T(perSecond().toFixed(1) + ' /秒') + '</b></div>';
+    + '<div class="row" data-hint="' + D.panelHints.probes + '"><span>' + T('探测器') + '</span><b>' + T(fmtNum(game.probes) + ' 台') + '</b></div>'
+    + '<div class="row" data-hint="' + D.panelHints.output + '"><span>' + T('产出') + '</span><b>' + T(fmtNum(perSecond()) + ' /秒') + '</b></div>'
+    + '<div class="row" data-hint="' + D.panelHints.tech + '"><span>' + T('科技') + '</span><b>' + T(techUnlocked + ' / ' + D.techs.length) + '</b></div>';
 
   // 命令按钮的可用状态
   for (const c of D.commands) {
@@ -271,10 +287,21 @@ function guideHint() {
 }
 
 /* ---------- 建命令按钮(只建一次) ---------- */
+// 命令是否可用:clickable:true 的常驻(存档 / 退出 / 科技树);
+// clickable:false 的要等科技解锁(科技表里的 unlockCommand 指到它就开)
+function commandUnlocked(c) {
+  if (c.clickable === true) return true;
+  if (c.clickable === false) {
+    const t = D.techs.find(function (x) { return x.unlockCommand === c.id; });
+    return !!t && game.unlocked.indexOf(t.id) >= 0;
+  }
+  return true;
+}
+
 function buildCommands() {
   cmdEl.innerHTML = '';   // 清掉旧按钮(新档/读档切换时避免重复)
   for (const c of D.commands) {
-    if (c.clickable === false) continue;   // 未解锁点击的命令先不出现(以后由科技树开启)
+    if (!commandUnlocked(c)) continue;   // 未解锁点击的命令先不出现(由科技树开启)
     const btn = document.createElement('button');
     btn.id = 'btn-' + c.id;
     btn.textContent = '[ ' + c.label + ' ]';
@@ -291,6 +318,7 @@ function buildCommands() {
 }
 
 /* ---------- 命令行:输入 + 命令面板 + Tab 补全 ---------- */
+// 两个命令入口:终端一个、科技树视图一个(共用同一套逻辑,所以写成一个 binder)
 const cmdInput  = document.getElementById('cmd-input');
 const paletteEl = document.getElementById('palette');
 
@@ -298,10 +326,10 @@ const paletteEl = document.getElementById('palette');
 function setInputEnabled(on) {
   cmdInput.disabled = !on;
   if (on) {
-    cmdInput.focus();
+    if (!techVisible) cmdInput.focus();
   } else {
     cmdInput.value = '';
-    hidePalette();
+    hidePalette(cmdInput, paletteEl);
   }
 }
 
@@ -313,19 +341,19 @@ function matchCommands(prefix) {
     .sort(function (a, b) { return a.label < b.label ? -1 : 1; });
 }
 
-// 命令面板:紧贴输入行下方
-function showPalette() {
-  const matches = matchCommands(cmdInput.value);
-  paletteEl.innerHTML = '';
+// 命令面板:紧贴输入行下方(每个输入行各有一个面板元素)
+function showPalette(input, palette) {
+  const matches = matchCommands(input.value);
+  palette.innerHTML = '';
 
-  if (!cmdInput.value.trim()) { hidePalette(); return; }
+  if (!input.value.trim()) { hidePalette(input, palette); return; }
 
   if (matches.length === 0) {
     const none = document.createElement('div');
     none.className = 'palette-item dim';
     none.textContent = '命令以 / 开头;输入 / 查看全部命令。';
-    paletteEl.appendChild(none);
-    paletteEl.classList.remove('hidden');
+    palette.appendChild(none);
+    palette.classList.remove('hidden');
     return;
   }
 
@@ -335,55 +363,68 @@ function showPalette() {
     item.textContent = c.label + '  —  ' + (c.hint || '');
     item.onmousedown = function (e) {   // 用 mousedown:别让输入框先失焦
       e.preventDefault();
-      cmdInput.value = '';
-      hidePalette();
+      input.value = '';
+      hidePalette(input, palette);
       runCommand(c.id);
-      cmdInput.focus();
+      input.focus();
     };
-    paletteEl.appendChild(item);
+    palette.appendChild(item);
   });
 
-  paletteEl.classList.remove('hidden');
+  palette.classList.remove('hidden');
 }
 
-function hidePalette() {
-  paletteEl.classList.add('hidden');
-  paletteEl.innerHTML = '';
+function hidePalette(input, palette) {
+  const p = palette || document.getElementById('palette');
+  p.classList.add('hidden');
+  p.innerHTML = '';
+}
+
+function hideAllPalettes() {
+  hidePalette(cmdInput, paletteEl);
+  hidePalette(techInput, techPalette);
 }
 
 // 回车:执行输入的命令
-function runTyped() {
-  const text = cmdInput.value.trim().toLowerCase();
-  hidePalette();
+function runTyped(input, palette) {
+  const text = input.value.trim().toLowerCase();
+  hidePalette(input, palette);
   if (!text) return;
   const cmd = D.commands.find(function (c) { return c.label.toLowerCase() === text; });
   if (cmd) {
-    cmdInput.value = '';
+    input.value = '';
     runCommand(cmd.id);
   } else {
     log('未知命令:' + text + '(命令需以 / 开头,如 /mine)', { cls: 'err', instant: true });
   }
 }
 
-cmdInput.addEventListener('input', showPalette);
-
-cmdInput.addEventListener('keydown', function (e) {
-  if (e.key === 'Tab') {
-    e.preventDefault();
-    const matches = matchCommands(cmdInput.value);
-    if (matches.length) cmdInput.value = matches[0].label;   // Tab 补全到第一项
-    showPalette();
-  } else if (e.key === 'Enter') {
-    e.preventDefault();
-    runTyped();
-  } else if (e.key === 'Escape') {
-    hidePalette();
-  }
-});
+// 把"输入 / Tab 补全 / 回车执行 / Esc"这一套接到某个输入行上
+function bindCmdInput(input, palette) {
+  input.addEventListener('input', function () {
+    noteAction();
+    showPalette(input, palette);
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const matches = matchCommands(input.value);
+      if (matches.length) input.value = matches[0].label;   // Tab 补全到第一项
+      showPalette(input, palette);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      runTyped(input, palette);
+    } else if (e.key === 'Escape') {
+      hidePalette(input, palette);
+      if (techVisible) closeTech();
+    }
+  });
+}
 
 /* ---------- 响应命令 ---------- */
 function runCommand(id) {
   game.commandsRun += 1;
+  noteAction();
 
   if (id === 'mine') {
     game.material += D.numbers.manualMine;
@@ -402,12 +443,305 @@ function runCommand(id) {
   } else if (id === 'save') {
     saveGame();
 
+  } else if (id === 'research') {
+    openTech();
+    return;   // 已切到科技树视图,不必再渲染终端
+
+  } else if (id === 'back') {
+    if (techVisible) { closeTech(); return; }
+    log('已经在最外层了。', { cls: 'dim', instant: true });
+
   } else if (id === 'exit') {
     exitToCover();
     return;   // 已切回封面,不必再渲染游戏界面
   }
   checkStory();   // 命令可能刚好跨过某个剧情 / 引导的触发点
+  checkAchievements();
   render();
+}
+
+/* ---------- 科技树视图(V0.1.1:整屏替换终端) ---------- */
+const techListEl   = document.getElementById('tech-list');
+const techDetailEl = document.getElementById('tech-detail');
+const techHintEl   = document.getElementById('tech-hint');
+const techInput     = document.getElementById('tech-input');
+const techPalette   = document.getElementById('tech-palette');
+const techSearchEl = document.getElementById('tech-search');
+const techStatusEl = document.getElementById('tech-status');
+const techCatsEl   = document.getElementById('tech-cats');
+const techCountEl  = document.getElementById('tech-count');
+
+let techVisible = false;                                       // 科技树是否正在显示
+let techSel = 0;                                               // 选中项(筛选后列表里的序号)
+const techFilter = { status: "全部", cat: "全部", text: "" };   // 三筛选器
+
+// 节点状态:done 已解锁 / ready 可解锁(前置满足) / locked 前置没满足 / wip 还没上线
+function techStatusOf(t) {
+  if (game.unlocked.indexOf(t.id) >= 0) return 'done';
+  if (t.wip) return 'wip';
+  if (t.requires.some(function (r) { return game.unlocked.indexOf(r) < 0; })) return 'locked';
+  return 'ready';
+}
+
+function resName(id) {
+  const r = D.resources.find(function (x) { return x.id === id; });
+  return r ? r.name : id;
+}
+
+function techCostOf(t) {
+  const parts = [];
+  for (const k in t.cost) parts.push(resName(k) + " " + fmtNum(t.cost[k]));
+  return parts.join(" + ");
+}
+
+// 现在只有材料能花;能量 / 算力 / 数据要等对应系统上线
+function techAffordable(t) {
+  return (t.cost.material || 0) <= game.material;
+}
+
+function techMatches(t) {
+  const st = techStatusOf(t);
+  if (techFilter.status !== "全部" && techFilter.status !== D.techView.statusLabels[st]) return false;
+  if (techFilter.cat !== "全部" && t.cat !== techFilter.cat) return false;
+  const q = techFilter.text.trim().toLowerCase();
+  if (q && (t.name + t.cat + t.desc + t.effect).toLowerCase().indexOf(q) < 0) return false;
+  return true;
+}
+
+// 排序:可解锁 → 已解锁 → 锁定 → 未上线;同级按表内顺序(表 = 设计里的推进顺序)
+const TECH_RANK = { ready: 0, done: 1, locked: 2, wip: 3 };
+function visibleTechs() {
+  return D.techs.filter(techMatches).sort(function (a, b) {
+    return (TECH_RANK[techStatusOf(a)] - TECH_RANK[techStatusOf(b)])
+        || (D.techs.indexOf(a) - D.techs.indexOf(b));
+  });
+}
+
+function renderTechFilters() {
+  techStatusEl.innerHTML = '';
+  D.techView.filterStatus.forEach(function (s) {
+    const c = document.createElement('span');
+    c.className = 'chip' + (techFilter.status === s ? ' on' : '');
+    c.textContent = s;
+    c.onclick = function () { techFilter.status = s; techSel = 0; renderTech(); };
+    techStatusEl.appendChild(c);
+  });
+  techCatsEl.innerHTML = '';
+  const cats = ["全部"];
+  for (const t of D.techs) if (cats.indexOf(t.cat) < 0) cats.push(t.cat);
+  cats.forEach(function (s) {
+    const c = document.createElement('span');
+    c.className = 'chip' + (techFilter.cat === s ? ' on' : '');
+    c.textContent = s;
+    c.onclick = function () { techFilter.cat = s; techSel = 0; renderTech(); };
+    techCatsEl.appendChild(c);
+  });
+}
+
+function techHint(text) { techHintEl.textContent = text || ''; }
+
+function renderTechDetail() {
+  const list = visibleTechs();
+  const t = list[techSel];
+  if (!t) { techDetailEl.innerHTML = ''; return; }
+  const st = techStatusOf(t);
+  techDetailEl.innerHTML =
+      '<div class="d-line"><span class="d-name">' + t.name + '</span> · ' + t.cat + ' · '
+      + D.techView.statusLabels[st] + ' · ' + techCostOf(t) + '</div>'
+    + '<div class="d-line">效果:' + t.effect + '</div>'
+    + '<div class="d-line">' + t.desc + '</div>'
+    + '<div class="d-line" id="tech-action"></div>';
+  const btn = document.createElement('button');
+  btn.className = 'unlock-btn';
+  btn.textContent = st === 'done' ? '[ 已解锁 ]' : '[ 解锁 ]';
+  btn.disabled = !(st === 'ready' && techAffordable(t));
+  btn.onclick = function () { tryUnlock(t); };
+  document.getElementById('tech-action').appendChild(btn);
+}
+
+function renderTech() {
+  if (!techVisible) return;
+  const list = visibleTechs();
+  if (techSel >= list.length) techSel = Math.max(0, list.length - 1);
+  techCountEl.textContent = '已解锁 ' + game.unlocked.length + ' / ' + D.techs.length;
+
+  techListEl.innerHTML = '';
+  if (!list.length) {
+    const d = document.createElement('div');
+    d.className = 'tech-item dim';
+    d.textContent = D.techView.empty;
+    techListEl.appendChild(d);
+  }
+  list.forEach(function (t, i) {
+    const st = techStatusOf(t);
+    const row = document.createElement('div');
+    row.className = 'tech-item st-' + st + (i === techSel ? ' active' : '');
+    row.innerHTML =
+        '<span class="t-name">' + t.name + '</span>'
+      + '<span class="t-cat">' + t.cat + '</span>'
+      + '<span class="t-status">' + D.techView.statusLabels[st] + '</span>'
+      + '<span class="t-cost">' + techCostOf(t) + '</span>'
+      + '<span class="t-effect">' + t.effect + '</span>';
+    row.onmousedown = function (e) {
+      e.preventDefault();
+      techSel = i;
+      renderTech();
+      techListEl.focus();
+    };
+    techListEl.appendChild(row);
+  });
+  renderTechDetail();
+}
+
+function tryUnlock(t) {
+  const st = techStatusOf(t);
+  if (st === 'done') { techHint(t.name + ' 已经解锁了。'); return; }
+  if (st === 'wip')  { techHint(D.techView.reasons.wip); return; }
+  if (st === 'locked') {
+    const miss = t.requires.filter(function (r) { return game.unlocked.indexOf(r) < 0; })
+      .map(function (r) {
+        const x = D.techs.find(function (y) { return y.id === r; });
+        return x ? x.name : r;
+      });
+    techHint(D.techView.reasons.locked + miss.join("、"));
+    return;
+  }
+  if (!techAffordable(t)) { techHint(techCostOf(t) + " —— " + D.techView.reasons.poor); return; }
+
+  game.material -= (t.cost.material || 0);
+  game.unlocked.push(t.id);
+  techHint('已解锁:' + t.name + '。');
+  log('> /research ' + t.name, { cls: 'cmd', instant: true, important: true });
+  log('  已解锁:' + t.name + '(' + t.effect + ')', { cls: 'ok', important: true });
+  noteAction();
+  checkAchievements();
+  buildCommands();   // 解锁后可能要出现新的点击按钮
+  renderTech();
+  render();
+}
+
+function openTech() {
+  techVisible = true;
+  techSel = 0;
+  hideAllPalettes();
+  showScreen('tech');
+  techSearchEl.value = techFilter.text;
+  renderTechFilters();
+  renderTech();
+  techHint(D.techView.foot);
+  techListEl.focus();
+}
+
+function closeTech() {
+  techVisible = false;
+  hideAllPalettes();
+  showScreen('game');
+  techHint('');
+  cmdInput.focus();
+  paintHint();
+}
+
+// 科技树里的键盘:↑↓ 选择、回车解锁、PageUp/Down 翻页、Home/End 到头、Esc 返回
+techListEl.addEventListener('keydown', function (e) {
+  const list = visibleTechs();
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    techSel = Math.max(0, Math.min(list.length - 1, techSel + (e.key === 'ArrowDown' ? 1 : -1)));
+    renderTech();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (list[techSel]) tryUnlock(list[techSel]);
+  } else if (e.key === 'PageDown' || e.key === 'PageUp') {
+    e.preventDefault();
+    techSel = Math.max(0, Math.min(list.length - 1, techSel + (e.key === 'PageDown' ? 8 : -8)));
+    renderTech();
+  } else if (e.key === 'Home') {
+    e.preventDefault(); techSel = 0; renderTech();
+  } else if (e.key === 'End') {
+    e.preventDefault(); techSel = Math.max(0, list.length - 1); renderTech();
+  }
+});
+
+techSearchEl.addEventListener('input', function () {
+  noteAction();
+  techFilter.text = techSearchEl.value;
+  techSel = 0;
+  renderTech();
+});
+
+// 任何地方按 Esc:在科技树里就返回终端
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && techVisible) { e.preventDefault(); closeTech(); }
+});
+
+/* ---------- 成就:未获得的在封面隐藏,获得时在终端弹一行 ---------- */
+function achReady(a) {
+  const w = a.when || {};
+  if (w.probes != null && game.probes < w.probes) return false;
+  if (w.scan != null && (game.scan || 0) < w.scan) return false;
+  if (w.unlockedCount != null && game.unlocked.length < w.unlockedCount) return false;
+  if (w.unlockedAll && !w.unlockedAll.every(function (id) { return game.unlocked.indexOf(id) >= 0; })) return false;
+  if (w.ending != null || w.readAuthorsNote) return false;   // 等结局 / 作者的话上线
+  return true;
+}
+
+function checkAchievements() {
+  for (const a of D.achievements) {
+    if (game.achievements.indexOf(a.id) >= 0) continue;
+    if (!achReady(a)) continue;
+    game.achievements.push(a.id);
+    log('你获得了一个成就:' + a.name + '。', { cls: 'ach', important: true });
+    log('  ' + a.desc, { cls: 'dim', important: true });
+  }
+}
+
+function buildAchievements() {
+  const list = document.getElementById('ach-list');
+  const got = game.achievements;
+  document.getElementById('ach-count').textContent = '已解锁 ' + got.length + ' / ' + D.achievements.length;
+  list.innerHTML = '';
+  if (!got.length) {
+    const d = document.createElement('div');
+    d.className = 'panel-note';
+    d.textContent = '还没有获得任何成就。玩一局就有了。';
+    list.appendChild(d);
+    return;
+  }
+  for (const a of D.achievements) {
+    if (got.indexOf(a.id) < 0) continue;   // 未获得 → 隐藏
+    const row = document.createElement('div');
+    row.className = 'ach-row';
+    row.innerHTML = '<b>' + a.name + '</b><div class="dim">' + a.desc + '</div>';
+    list.appendChild(row);
+  }
+}
+
+function openAchievements() {
+  buildAchievements();
+  showScreen('achievements');
+}
+
+/* ---------- 闲置提示(Q8:3 分钟没有有效操作 → 指南系统提示一句) ---------- */
+let lastActionAt = Date.now();
+let idleHintShown = -1;    // 已经提示过第几条,同一条不重复刷屏
+
+function noteAction() { lastActionAt = Date.now(); }
+
+// 满足条件的最后一条(和 guideHints 同一套语义)
+function idleHintIndex() {
+  let idx = -1;
+  D.idleHints.forEach(function (h, i) { if (storyReady(h.when)) idx = i; });
+  return idx;
+}
+
+function checkIdle() {
+  if (!running) return;
+  if (Date.now() - lastActionAt < D.numbers.idleHintSec * 1000) return;
+  const i = idleHintIndex();
+  lastActionAt = Date.now();
+  if (i < 0 || i === idleHintShown) return;
+  idleHintShown = i;
+  log('指南:' + D.idleHints[i].text, { cls: 'dim', important: true });
 }
 
 /* ---------- 存档:localStorage ---------- */
@@ -431,6 +765,8 @@ function snapshot() {
     timeSec:  game.timeSec,
     commandsRun: game.commandsRun,
     fired:    game.fired,
+    unlocked: game.unlocked,
+    achievements: game.achievements,
     importantLog: game.importantLog,
     logHistory: game.logHistory,
   };
@@ -448,12 +784,13 @@ function saveGame(silent) {
   }
 }
 
-// 运行中每 3 秒自动存一次 —— 刷新 / 意外关闭也能续上
+// 运行中定时自动存档(Q8 决策:1 分钟一次)—— 刷新 / 意外关闭也能续上
+// (刷新与关窗时还有 beforeunload / visibilitychange 兜底,所以间隔长一点也不会丢)
 function startAutoSave() {
   stopAutoSave();
   autoSaveTimer = setInterval(function () {
     if (running) writeSave(snapshot());
-  }, 3000);
+  }, D.numbers.autosaveSec * 1000);
 }
 function stopAutoSave() {
   if (autoSaveTimer) { clearInterval(autoSaveTimer); autoSaveTimer = null; }
@@ -465,6 +802,8 @@ function applySave(d) {
   game.probes   = Number(d.probes)   || 1;
   game.timeSec  = Number(d.timeSec)  || 0;
   game.commandsRun = Number(d.commandsRun) || 0;
+  game.unlocked = Array.isArray(d.unlocked) ? d.unlocked : [];
+  game.achievements = Array.isArray(d.achievements) ? d.achievements : [];
   game.importantLog = Array.isArray(d.importantLog) ? d.importantLog : [];
   game.logHistory   = Array.isArray(d.logHistory)   ? d.logHistory   : [];
   // 旧存档(V0.1.0 之前)没有剧情进度:把"此刻已经该发生"的节点记为已触发,避免读档瞬间刷屏
@@ -485,9 +824,12 @@ function clearLog() {
 }
 
 /* ---------- 界面切换 ---------- */
-// name: 'cover' | 'game' | 'settings' | 'quit'
+// name: 'cover' | 'game' | 'tech' | 'settings' | 'achievements' | 'quit'
 function showScreen(name) {
-  const map = { cover: 'cover', game: 'screen', settings: 'settings', quit: 'quit' };
+  const map = {
+    cover: 'cover', game: 'screen', tech: 'tech',
+    settings: 'settings', achievements: 'achievements', quit: 'quit',
+  };
   for (const key in map) {
     document.getElementById(map[key]).classList.toggle('hidden', name !== key);
   }
@@ -520,6 +862,8 @@ function resetGame() {
   game.timeSec  = 0;
   game.commandsRun = 0;
   game.fired    = [];
+  game.unlocked = [];
+  game.achievements = [];
   game.importantLog = [];
   game.logHistory = [];
   game.lastTick = Date.now();
@@ -708,9 +1052,14 @@ function bindCover() {
     const d = readSave();
     if (d) startLoaded(d);
   };
+  document.getElementById('btn-achievements').onclick = openAchievements;
   document.getElementById('btn-settings').onclick = openSettings;
   document.getElementById('btn-quit').onclick = quitGame;
   document.getElementById('btn-settings-back').onclick = function () {
+    showScreen('cover');
+    refreshCover();
+  };
+  document.getElementById('btn-ach-back').onclick = function () {
     showScreen('cover');
     refreshCover();
   };
@@ -719,9 +1068,11 @@ function bindCover() {
 // 回到封面(不删存档,只是停止运行)
 function showCover() {
   running = false;
+  techVisible = false;
   stopAutoSave();
   setInputEnabled(false);
   clearLog();
+  hideAllPalettes();
   showScreen('cover');
   refreshCover();
 }
@@ -754,6 +1105,8 @@ try {
 setInputEnabled(false);   // 先锁住输入行,进游戏后再打开
 readSettings();
 bindCover();
+bindCmdInput(cmdInput, paletteEl);      // 终端里的命令入口
+bindCmdInput(techInput, techPalette);   // 科技树里的命令入口(/back 用)
 
 const savedSession = readSave();
 if (isReload && savedSession && savedSession.active) {

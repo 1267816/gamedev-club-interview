@@ -18,6 +18,7 @@
       <div class="cover-menu">
         <button id="btn-new">[ 新游戏 ]</button>
         <button id="btn-load">[ 加载存档 ]</button>
+        <button id="btn-achievements">[ 成就 ]</button>
         <button id="btn-settings">[ 设置 ]</button>
         <button id="btn-quit">[ 退出 ]</button>
       </div>
@@ -42,6 +43,18 @@
     <div class="panel">
       <div class="panel-title">会话已终止</div>
       <div class="panel-note">可以安全关闭此页面。</div>
+    </div>
+  </div>
+
+  <!-- 成就(Q4:未获得的成就隐藏,只在封面展示) -->
+  <div id="achievements" class="hidden">
+    <div class="panel">
+      <div class="panel-title">成就</div>
+      <div class="panel-note" id="ach-count">已解锁 0 / 0</div>
+      <div id="ach-list"></div>
+      <div class="panel-menu">
+        <button id="btn-ach-back">[ 返回 ]</button>
+      </div>
     </div>
   </div>
 
@@ -70,6 +83,26 @@
       <div id="commands"></div>
     </footer>
 
+  </div>
+
+  <!-- 科技树:整屏替换终端(/research 打开、/back 或 Esc 返回) -->
+  <div id="tech" class="hidden">
+    <header id="tech-header">
+      <span id="tech-title">科技树</span>
+      <span id="tech-count">已解锁 0 / 0</span>
+    </header>
+    <div id="tech-filters">
+      <div class="filter-row"><span class="filter-label">状态</span><span id="tech-status"></span></div>
+      <div class="filter-row"><span class="filter-label">类别</span><span id="tech-cats"></span></div>
+      <div class="filter-row"><span class="filter-label">搜索</span><input id="tech-search" type="text" autocomplete="off" spellcheck="false"></div>
+    </div>
+    <main id="tech-list" tabindex="0" aria-label="科技节点列表"></main>
+    <div id="tech-detail"></div>
+    <footer id="tech-foot">
+      <div id="tech-hint"></div>
+      <div id="tech-ps1"><span>&gt;</span><input id="tech-input" type="text" autocomplete="off" spellcheck="false"></div>
+      <div id="tech-palette" class="hidden"></div>
+    </footer>
   </div>
 
   <script src="src/js/game-data.js"></script>

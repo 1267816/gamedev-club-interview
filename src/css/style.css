@@ -250,3 +250,99 @@ body::after {
 /* ---------- 可点击的「以前的信息」折叠行 ---------- */
 .archived { color: var(--accent); cursor: pointer; }
 .archived:hover { text-decoration: underline; }
+
+/* ---------- 科技树视图(V0.1.1:整屏替换终端) ---------- */
+#tech {
+  height: 100vh;
+  padding: 16px 20px;
+  display: grid;
+  gap: 10px;
+  grid-template-rows: auto auto 1fr auto auto;
+}
+
+#tech-header {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+#tech-count { color: var(--dim); }
+
+#tech-filters { font-size: 14px; }
+.filter-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.filter-label { color: var(--dim); width: 3.5em; }
+.chip { cursor: pointer; padding: 1px 8px; color: var(--dim); }
+.chip:hover { color: var(--fg); }
+.chip.on { color: var(--fg); background: rgba(142, 255, 168, .14); }
+
+#tech-search {
+  flex: 1;
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  outline: none;
+}
+
+#tech-list {
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 6px 0;
+  outline: none;
+}
+
+.tech-item { display: flex; gap: 10px; padding: 3px 8px; cursor: pointer; white-space: nowrap; }
+.tech-item.active { background: rgba(142, 255, 168, .14); }
+.tech-item .t-name   { width: 9em; }
+.tech-item .t-cat    { width: 4em; color: var(--dim); }
+.tech-item .t-status { width: 4em; }
+.tech-item .t-cost   { width: 9em; color: var(--accent); }
+.tech-item .t-effect { color: var(--dim); }
+.tech-item.st-ready  .t-status { color: var(--fg); }
+.tech-item.st-done   .t-status { color: var(--dim); }
+.tech-item.st-locked .t-status,
+.tech-item.st-wip    .t-status { color: var(--dim); }
+.tech-item.st-done   .t-name   { color: var(--dim); }
+
+#tech-detail { min-height: 6.4em; color: var(--dim); }
+#tech-detail .d-name { color: var(--fg); }
+#tech-detail .d-line { min-height: 1.6em; }
+
+#tech-foot { border-top: 1px solid var(--line); padding-top: 8px; }
+#tech-hint { color: var(--accent); min-height: 1.6em; }
+#tech-ps1 { display: flex; align-items: center; gap: 8px; }
+#tech-input {
+  flex: 1;
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+#tech-palette {
+  border: 1px solid var(--line);
+  margin-top: 6px;
+  max-height: calc(1.6em * 3 + 10px);
+  overflow-y: auto;
+}
+
+.unlock-btn {
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.unlock-btn:hover { border-color: var(--fg); }
+.unlock-btn:disabled { color: var(--dim); cursor: not-allowed; }
+
+/* ---------- 成就 ---------- */
+.ach { color: var(--accent); }
+#achievements .panel { min-width: 440px; }
+#ach-count { margin-bottom: 12px; }
+#ach-list { max-height: 320px; overflow-y: auto; }
+.ach-row { margin-bottom: 10px; }
+.ach-row b { color: var(--fg); }
