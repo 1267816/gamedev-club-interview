@@ -49,7 +49,7 @@ const P = {
 
   // ---- 模块(各占 1 算力槽) ----
   droneCost: 60,  droneGrowth: 1.12, droneRatePerProbe: 0.12, // 采集助手:每台探测器 +0.12 材料/秒
-  decoderCost: 90, decoderGrowth: 1.12, decoderRate: 0.3,     // 解析器 → 数据
+  decoderCost: 90, decoderGrowth: 1.12, decoderRate: 0.45,    // 解析器 → 数据(V0.2.4 方案 B:0.3 → 0.45)
   repCost: 200, repGrowth: 1.15, repEvery: 4,                 // 复制助手:每 4 秒自动复制
   repReserve: 3,                                             // 只在材料 ≥ 成本×3 时动手
 
@@ -59,7 +59,7 @@ const P = {
   // ---- 星球探测进度(灵感 1) ----
   // 速率系数(命令行第一个参数是数字时才当作 scanK,否则用默认值)
   // V0.2.0:研究改成"需要时间"之后,科技线整体后移,探测跟着放慢,两条线才一起收尾(见 docs/research.md 第 28 节)
-  scanK: Number.isFinite(Number(process.argv[2])) ? Number(process.argv[2]) : 0.0065,
+  scanK: Number.isFinite(Number(process.argv[2])) ? Number(process.argv[2]) : 0.008,   // V0.2.4 方案 B:0.0065 → 0.008
   scanFalloff: 140,      // 覆盖率衰减:速率 × (1 − 进度/140)(V0.2.0:200 → 140)
   scanNoCommMul: 0.2,    // 未解锁长距离通信:只能扫基地附近
   scanDecoderBonus: 0.12, // 每个在跑的解析器让探测速率 ×(1+0.12)
@@ -77,20 +77,20 @@ const P = {
 // 科技表(顺序 = 玩家模型的购买顺序;货币分工见 D8:点击/硬件用材料,自动化/倍率用数据)
 const TECHS = [
   // research = 研究秒数(V0.2.0);scanReq = 需要探测先到这个百分比(V0.2.0 的扫描闸门)
-  { id: 'click_mine', cost: { material: 40 },  research: 20 },
-  { id: 'click_rep',  cost: { material: 140 }, research: 25 },
-  { id: 'reactor',    cost: { material: 320 }, research: 30 },
-  { id: 'core',       cost: { material: 620 }, research: 35 },
-  { id: 'decode',     cost: { material: 560 }, research: 40 },
-  { id: 'drone',      cost: { data: 3 },   research: 45, scanReq: 2 },   // 无人采集
-  { id: 'comm',       cost: { data: 6 },   research: 50, scanReq: 8 },   // 长距离通信(解除探测 ×0.2)
-  { id: 'autorep',    cost: { data: 10 },  research: 55, scanReq: 14 },  // 自主复制
-  { id: 'probe_eff',  cost: { data: 16 },  research: 60, scanReq: 22 },  // 采集优化 ×1.5
-  { id: 'core_eff',   cost: { data: 26 },  research: 65, scanReq: 32 },  // 并行调度:槽 ×2、耗能 ×0.8
-  { id: 'decode_eff', cost: { data: 38 },  research: 70, scanReq: 45 },  // 语义重构:解析 ×1.6
-  { id: 'fusion',     cost: { data: 55 },  research: 75, scanReq: 58 },  // 聚变改良:反应堆 ×1.6
-  { id: 'bootstrap',  cost: { data: 85 },  research: 80, scanReq: 68 },  // 递归自举:探测器 ×2
-  { id: 'starship',   cost: { data: 120 }, research: 85, scanReq: 75 },  // 星际航行(结局前置)
+  { id: 'click_mine', cost: { material: 40 },  research: 10 },
+  { id: 'click_rep',  cost: { material: 140 }, research: 13 },
+  { id: 'reactor',    cost: { material: 320 }, research: 16 },
+  { id: 'core',       cost: { material: 620 }, research: 19 },
+  { id: 'decode',     cost: { material: 560 }, research: 22 },
+  { id: 'drone',      cost: { data: 3 },   research: 25, scanReq: 2 },   // 无人采集
+  { id: 'comm',       cost: { data: 5 },   research: 28, scanReq: 8 },   // 长距离通信(解除探测 ×0.2)
+  { id: 'autorep',    cost: { data: 9 },   research: 31, scanReq: 14 },  // 自主复制
+  { id: 'probe_eff',  cost: { data: 14 },  research: 34, scanReq: 22 },  // 采集优化 ×1.5
+  { id: 'core_eff',   cost: { data: 22 },  research: 37, scanReq: 32 },  // 并行调度:槽 ×2、耗能 ×0.8
+  { id: 'decode_eff', cost: { data: 32 },  research: 40, scanReq: 45 },  // 语义重构:解析 ×1.6
+  { id: 'fusion',     cost: { data: 47 },  research: 43, scanReq: 58 },  // 聚变改良:反应堆 ×1.6
+  { id: 'bootstrap',  cost: { data: 72 },  research: 46, scanReq: 68 },  // 递归自举:探测器 ×2
+  { id: 'starship',   cost: { data: 102 }, research: 49, scanReq: 75 },  // 星际航行(结局前置)
 ];
 
 // 剧情节点:挂在探测进度上;tech 型节点挂在科技解锁上

@@ -18,6 +18,7 @@ const game = {
   off:       {},        // 被停用的模块 { rep: true }            —— V0.1.3
   ending:    null,      // 结局:'gravekeeper' | 'starry' | null  —— V0.1.3
   choiceSnapshot: null, // "选择时刻"的经济快照,用于结局后回档  —— V0.1.3
+  readAuthorsNote: false, // S19:看过「作者的话」没有(成就靠它)
   timeSec:  0,          // 游戏内经过的秒数
   lastTick: Date.now(), // 上一次推进的真实时刻
   commandsRun: 0,       // 已执行命令数(剧情触发用)
@@ -34,6 +35,20 @@ let bootDone = false;
 
 // 游戏是否在运行:封面、未开始时不流动
 let running = false;
+
+// V0.2.4(S19):长按加速 —— 按住回车(或按住鼠标)时打字机 ×6。
+// pressStartAt 记"这一轮按下的真实时刻",够久才算长按,免得误伤单次回车。
+let longPress = false;
+let pressStartAt = 0;
+const LONG_PRESS_MS = 350;
+function pressDown() { if (!pressStartAt) pressStartAt = Date.now(); }
+function pressUp() { pressStartAt = 0; longPress = false; }
+function checkLongPress() {
+  if (pressStartAt && Date.now() - pressStartAt >= LONG_PRESS_MS) {
+    if (!longPress) log('（长按中：文字加速）', { cls: 'dim', instant: true });
+    longPress = true;
+  }
+}
 
 // V0.2.0:科技树里"终端有新消息"的提示。
 // 值为"从这一秒起终端有新消息"(null = 没有)。回来会让它清空 —— 见 markStoryPending / clearStoryPending。
@@ -181,6 +196,7 @@ function log(text, opts) {
     revealAll: opts.revealAll,
     group: opts.group,
     important: opts.important,
+    type: opts.type,   // S21:human = 人类残片(打得更慢),machine / boot = 快(默认)
   });
   pump();
 }
@@ -225,18 +241,36 @@ function pump() {
 
   const chars = Array.from(shown);   // Array.from 兼容中文与代理对
   let i = 0;
-  activeTimer = setInterval(function () {
-    if (skip) i = chars.length; else i++;
+  // V0.2.4:S19(长按加速)+ S21(打字机分级)。
+  // 用 setTimeout 递归而不是 setInterval —— 每一跳的间隔可以不同:
+  //   人类残片 32ms/字 + 轻微抖动(像有人在写),机器日志 12ms、启动序列 9ms;
+  //   长按(回车 / 鼠标)时 ×6;点一下屏幕则是整行立刻显示(skip,旧行为不变)。
+  const typeDelay = function () {
+    const d = D.lineDelays || {};
+    if (item.type === 'boot') return d.boot || 9;
+    if (item.type === 'machine') return d.machine || 12;
+    if (item.type === 'human') {
+      const base = d.human || 32;
+      return base + Math.round((Math.random() * 2 - 1) * 6);   // ±6ms 抖动
+    }
+    return d.default || 12;
+  };
+  const step = function () {
+    if (skip) i = chars.length;
+    else i += (longPress ? 6 : 1);
     line.textContent = chars.slice(0, i).join('');
     logEl.scrollTop = logEl.scrollHeight;
     if (i >= chars.length) {
-      clearInterval(activeTimer);
       activeTimer = null;
       finishLine(item);
       busy = false;
       pump();
+      return;
     }
-  }, 12);
+    const ms = longPress ? 4 : typeDelay();
+    activeTimer = setTimeout(step, ms);
+  };
+  activeTimer = setTimeout(step, longPress ? 4 : typeDelay());
 }
 
 // 一行打完后:若它是转折行,就打开字符解析系统,并还原之前所有问号
@@ -322,6 +356,7 @@ function tick() {
   updateTechPending();           // 科技树里那行"终端有新消息"
   checkAchievements();           // 探测进度 / 探测器数量这类"自己会涨"的条件也要一直盯着
   checkIdle();                   // 太久没动 → 指南系统提示一句
+  checkLongPress();              // S19:按住回车 / 鼠标 → 打字机加速
   updateTechLive();              // 科技树开着的时候,资源读数与按钮状态要跟着涨
   render();
 }
@@ -447,6 +482,8 @@ function storyReady(when) {
   if (w.scan        != null && game.scan        < w.scan)        return false;
   // V0.2.0:研究进行中的提示(写在 guideHints 里用)
   if (w.researching != null && (!!game.research) !== !!w.researching) return false;
+  // V0.2.4:装过某个模块没有(guideHints / idleHints 用)
+  if (w.module != null && !(game.modules[w.module] > 0)) return false;
   return true;
 }
 
@@ -464,7 +501,13 @@ function checkStory() {
       game.fired.push(node.id);
       firedAny = true;
       for (const line of node.lines) {
-        log(line.text, { cls: line.cls, important: node.important !== false });
+        // S21:人类残片打得更慢(有"人味"),机器日志快。
+        // 不用在数据表里逐个标 type —— 残片本来就带 cls:"relic"(暖色),从它推出来即可。
+        log(line.text, {
+          cls: line.cls,
+          type: line.type || (line.cls === 'relic' ? 'human' : 'machine'),
+          important: node.important !== false,
+        });
       }
       again = true;   // 刚触发的节点可能解锁了下一个(如 after),再扫一遍
     }
@@ -506,6 +549,8 @@ function guideHint() {
 function commandUnlocked(c) {
   // 结局的两个选项:只有走到 75%「回声塔」之后才出现,而且选过就不再出现
   if (c.id === 'stay' || c.id === 'go') return endingReady() && !game.ending;
+  // V0.2.4:复制助手的开关要先装过「复制助手」
+  if (c.requiresModule) return (game.modules[c.requiresModule] || 0) > 0;
   if (c.clickable === true) return true;
   if (c.clickable === false) {
     const t = D.techs.find(function (x) { return x.unlockCommand === c.id; });
@@ -559,7 +604,11 @@ function setInputEnabled(on) {
 function matchCommands(prefix) {
   const p = prefix.trim().toLowerCase();
   return D.commands
-    .filter(function (c) { return c.label.toLowerCase().indexOf(p) === 0; })
+    .filter(function (c) {
+      // 没装模块的命令不列出来(/rep off 之类)
+      if (c.requiresModule && !(game.modules[c.requiresModule] > 0)) return false;
+      return c.label.toLowerCase().indexOf(p) === 0;
+    })
     .sort(function (a, b) { return a.label < b.label ? -1 : 1; });
 }
 
@@ -635,12 +684,19 @@ function bindCmdInput(input, palette) {
       showPalette(input, palette);
     } else if (e.key === 'Enter') {
       e.preventDefault();
+      pressUp();          // S19:按住加速只在"按住不放"期间生效,单次回车不受影响
       runTyped(input, palette);
     } else if (e.key === 'Escape') {
       hidePalette(input, palette);
       if (techVisible) closeTech();
+    } else {
+      pressDown();        // 任意按键按下:开始计时(够久 → 长按加速)
     }
   });
+  input.addEventListener('keyup', pressUp);
+  // 长按鼠标也能加速(S19):按住日志区 / 页面任意处
+  input.addEventListener('mousedown', pressDown);
+  document.addEventListener('mouseup', pressUp);
 }
 
 /* ---------- 响应命令 ---------- */
@@ -673,6 +729,24 @@ function runCommand(id) {
   } else if (id === 'back') {
     if (techVisible) { closeTech(); return; }
     log('已经在最外层了。', { cls: 'dim', instant: true });
+
+  } else if (id === 'rep-off' || id === 'rep-on') {
+    // V0.2.4:复制助手的开关(用户选项 ②)。等价于在科技树里选中它按空格。
+    if (!(game.modules.rep > 0)) {
+      log('还没安装复制助手：先在科技树里解锁「自主复制」并安装。', { cls: 'err', instant: true });
+    } else {
+      const wantOff = id === 'rep-off';
+      if (stopped('rep') === wantOff) {
+        log('复制助手已经是' + (wantOff ? '停用' : '启用') + '状态。', { cls: 'dim', instant: true });
+      } else {
+        game.off = game.off || {};
+        game.off.rep = wantOff;
+        log('> ' + (wantOff ? '停用' : '启用') + ' 复制助手' + (wantOff ? '（不再自动复制）' : ''),
+          { cls: 'cmd', instant: true, important: true });
+        keepSelectionOn('rep', 'module');   // 此刻若正开着科技树,让选中项停在它上面
+        if (techVisible) renderTech();
+      }
+    }
 
   } else if (id === 'stay') {
     doEnding('gravekeeper');
@@ -1218,6 +1292,10 @@ techSearchEl.addEventListener('input', function () {
 // 任何地方按 Esc:在科技树里就返回终端
 document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape' && techVisible) { e.preventDefault(); closeTech(); }
+  // S19:作者的话页面用 Esc 关掉
+  else if (e.key === 'Escape' && !document.getElementById('author').classList.contains('hidden')) {
+    e.preventDefault(); closeAuthorsNote();
+  }
 });
 
 /* ---------- 成就:未获得的在封面隐藏,获得时在终端弹一行 ---------- */
@@ -1267,6 +1345,35 @@ function buildAchievements() {
 function openAchievements() {
   buildAchievements();
   showScreen('achievements');
+}
+
+/* ---------- 作者的话(S19):接口已就绪,正文在 game-data.js 的 authorsNote ---------- */
+let authorFrom = 'ending';   // 从哪儿打开的(决定 [ 返回 ] 回哪儿):'ending' 或 'cover'
+function openAuthorsNote() {
+  const A = D.authorsNote || { title: '作者的话', lines: [] };
+  document.getElementById('author-title').textContent = A.title || '作者的话';
+  document.getElementById('author-foot').textContent = A.foot || '';
+  const body = document.getElementById('author-body');
+  body.innerHTML = '';
+  for (const line of A.lines) {
+    const d = document.createElement('div');
+    d.className = 'author-line' + (line.cls ? ' ' + line.cls : '');
+    d.textContent = line.text || '';
+    body.appendChild(d);
+  }
+  showScreen('author');
+  // 看过了 → 记住(成就「作者的话」靠它解锁);写进存档,重开也算
+  if (!game.readAuthorsNote) {
+    game.readAuthorsNote = true;
+    writeAccountAuthorsNote();   // 账号级:换新档也算看过
+    checkAchievements();
+    if (running) writeSave(snapshot());
+  }
+}
+
+function closeAuthorsNote() {
+  if (authorFrom === 'cover') { showScreen('cover'); refreshCover(); }
+  else { showScreen('ending'); }
 }
 
 /* ---------- 闲置提示(Q8:3 分钟没有有效操作 → 指南系统提示一句) ---------- */
@@ -1403,6 +1510,15 @@ function checkIdle() {
 const SAVE_KEY = 'vn-01-save';
 // 成就是"账号级"的:换新档不会清空、也不会被新档覆盖(用户报过"新存档把成就洗掉了")
 const ACH_KEY = 'vn-01-achievements';
+// S19:「作者的话」看过没有 —— 也走账号级(它只用来解成就,不该被新档洗掉)
+const AUTHOR_KEY = 'vn-01-authors-note';
+
+function readAccountAuthorsNote() {
+  try { return localStorage.getItem(AUTHOR_KEY) === '1'; } catch (e) { return false; }
+}
+function writeAccountAuthorsNote() {
+  try { localStorage.setItem(AUTHOR_KEY, game.readAuthorsNote ? '1' : '0'); } catch (e) { /* 忽略 */ }
+}
 
 function readAccountAchievements() {
   try {
@@ -1446,6 +1562,7 @@ function snapshot() {
     modules:   game.modules,
     off:       game.off,
     ending:    game.ending,
+    readAuthorsNote: !!game.readAuthorsNote,   // S19:看过作者的话没有(成就靠它)
     choiceSnapshot: game.choiceSnapshot,
     timeSec:  game.timeSec,
     commandsRun: game.commandsRun,
@@ -1493,6 +1610,7 @@ function applySave(d) {
   game.modules   = (d.modules   && typeof d.modules   === 'object') ? d.modules   : {};
   game.off       = (d.off       && typeof d.off       === 'object') ? d.off       : {};
   game.ending    = (d.ending === 'gravekeeper' || d.ending === 'starry') ? d.ending : null;
+  game.readAuthorsNote = !!d.readAuthorsNote;
   game.choiceSnapshot = (d.choiceSnapshot && typeof d.choiceSnapshot === 'object') ? d.choiceSnapshot : null;
   game.timeSec  = Number(d.timeSec)  || 0;
   game.commandsRun = Number(d.commandsRun) || 0;
@@ -1502,6 +1620,7 @@ function applySave(d) {
     ? { id: d.research.id, startSec: Number(d.research.startSec) } : null;
   mergeAchievements(Array.isArray(d.achievements) ? d.achievements : []);   // 成就只增不减
   mergeAchievements(readAccountAchievements());
+  game.readAuthorsNote = !!d.readAuthorsNote || readAccountAuthorsNote();   // S19:账号级,只增不减
   game.importantLog = Array.isArray(d.importantLog) ? d.importantLog : [];
   game.logHistory   = Array.isArray(d.logHistory)   ? d.logHistory   : [];
   // 旧存档(V0.1.0 之前)没有剧情进度:把"此刻已经该发生"的节点记为已触发,避免读档瞬间刷屏
@@ -1522,11 +1641,12 @@ function clearLog() {
 }
 
 /* ---------- 界面切换 ---------- */
-// name: 'cover' | 'game' | 'tech' | 'settings' | 'achievements' | 'quit'
+// name: 'cover' | 'game' | 'tech' | 'settings' | 'achievements' | 'ending' | 'author' | 'quit'
 function showScreen(name) {
   const map = {
     cover: 'cover', game: 'screen', tech: 'tech',
-    settings: 'settings', achievements: 'achievements', ending: 'ending', quit: 'quit',
+    settings: 'settings', achievements: 'achievements', ending: 'ending',
+    author: 'author', quit: 'quit',
   };
   for (const key in map) {
     document.getElementById(map[key]).classList.toggle('hidden', name !== key);
@@ -1541,7 +1661,7 @@ function boot() {
   // 依次打出启动日志(条目是对象:{ text, revealAll })
   D.bootLog.forEach(function (entry, i) {
     setTimeout(function () {
-      log(entry.text, { revealAll: entry.revealAll, important: true });
+      log(entry.text, { revealAll: entry.revealAll, important: true, type: 'boot' });   // S21:启动序列最快
     }, i * 320);
   });
 
@@ -1565,6 +1685,7 @@ function resetGame() {
   game.off       = {};
   game.ending    = null;
   game.choiceSnapshot = null;
+  // 注意:readAuthorsNote **不在新档里清空** —— 它和成就一样是账号级的(S19)
   game.timeSec  = 0;
   energyScale = 1;
   repTimer = 0;
@@ -1763,6 +1884,7 @@ function bindCover() {
     if (d) startLoaded(d);
   };
   document.getElementById('btn-achievements').onclick = openAchievements;
+  document.getElementById('btn-author-cover').onclick = function () { authorFrom = 'cover'; openAuthorsNote(); };
   document.getElementById('btn-settings').onclick = openSettings;
   document.getElementById('btn-quit').onclick = quitGame;
   document.getElementById('btn-settings-back').onclick = function () {
@@ -1778,6 +1900,8 @@ function bindCover() {
     cmdInput.focus();
     render();
   };
+  document.getElementById('btn-end-author').onclick = function () { authorFrom = 'ending'; openAuthorsNote(); };
+  document.getElementById('btn-author-back').onclick = closeAuthorsNote;
   document.getElementById('btn-end-choice').onclick = function () {
     if (!backToChoice()) log('没有可回去的选择时刻。', { cls: 'dim', instant: true });
   };
@@ -1800,6 +1924,9 @@ function showCover() {
 function refreshCover() {
   document.getElementById('cover-version').textContent = '版本 ' + D.version;
   document.getElementById('btn-load').disabled = !readSave();
+  // S19:作者的话在封面出现一次之后常驻(看过就一直在,方便回看)
+  const a = document.getElementById('btn-author-cover');
+  if (a) a.classList.toggle('hidden', !game.readAuthorsNote);
 }
 
 // 离开页面时(刷新 / 关闭)顺手存一次;不再弹确认框
@@ -1830,6 +1957,7 @@ bindCmdInput(techInput, techPalette);   // 科技树里的命令入口(/back 用
 const savedSession = readSave();
 // 停在封面时也把存档里的成就读进来 —— 否则"大退重进"后封面成就页是空的(用户报的 bug 1)
 mergeAchievements(readAccountAchievements());
+game.readAuthorsNote = readAccountAuthorsNote();   // S19:作者的话也按账号级预读
 if (savedSession && Array.isArray(savedSession.achievements)) mergeAchievements(savedSession.achievements);
 if (isReload && savedSession && savedSession.active) {
   resumeSession(savedSession);            // 刷新:把整屏内容原样接上

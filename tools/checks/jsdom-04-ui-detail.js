@@ -85,7 +85,8 @@ function run() {
       ok('封面版本号与 game-data.js 一致(' + GAME_VERSION + ')',
         doc.getElementById('cover-version').textContent.indexOf(GAME_VERSION) >= 0,
         doc.getElementById('cover-version').textContent);
-      ok('封面 5 个按钮', doc.querySelectorAll('.cover-menu button').length === 5,
+      // V0.2.4:封面多了 [ 作者的话 ](看过之后才显示),所以现在是 6 个按钮
+      ok('封面 6 个按钮(含作者的话)', doc.querySelectorAll('.cover-menu button').length === 6,
         [].map.call(doc.querySelectorAll('.cover-menu button'), (b) => b.textContent).join(''));
 
       doc.getElementById('btn-new').click();

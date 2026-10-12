@@ -203,7 +203,8 @@ function run() {
       peek('game.ending = null; game.choiceSnapshot = null;'
         + 'game.unlocked = game.unlocked.filter(function(x){return x !== "probe_eff";});'
         + 'game.data = 999; game.material = 9999;'
-        + 'game.research = { id: "probe_eff", startSec: game.timeSec - 30 };');   // 研究 60 秒,已经走了 30 秒
+        // 用"研究总时长的一半"起手,这样不管研究秒数怎么调,进度都该是 ~50%
+        + 'game.research = { id: "probe_eff", startSec: game.timeSec - researchSecOf(techOf("probe_eff")) / 2 };');
       await sleep(200);
       ok('回档前:研究进度约 50%', Math.abs(peek('researchProgress()') - 0.5) < 0.15, peek('researchProgress()').toFixed(2));
       peek('game.choiceSnapshot = choiceSnapshotState(); game.timeSec += 300;');   // 模拟"又过了一段才选结局"

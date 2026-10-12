@@ -209,7 +209,7 @@ function run() {
       await sleep(200);
       ok('停用采集助手后,解析器顶上来', peek("slotsFor('decoder')") === 1 && peek("slotsFor('drone')") === 0,
         'decoder=' + peek("slotsFor('decoder')"));
-      ok('数据速率跟着变成 0.3', Math.abs(peek('dataRate()') - 0.3) < 1e-9, String(peek('dataRate()')));
+      ok('数据速率跟着变成 0.45(V0.2.4 方案 B)', Math.abs(peek('dataRate()') - 0.45) < 1e-9, String(peek('dataRate()')));
       peek('toggleModule("drone")');
       await sleep(100);
       peek('writeSave(snapshot())');

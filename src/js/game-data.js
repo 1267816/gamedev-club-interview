@@ -8,7 +8,7 @@ const GAME_DATA = {
   title: "VN-CommandLineSystem 自复制探测器命令行系统",
 
   // 游戏版本号(与 plan.md / test_datalog.md 的版本保持一致)
-  version: "V0.2.0",
+  version: "V0.2.4",
 
   // 数值:全部集中在这里,方便"一次只调一样"
   numbers: {
@@ -24,13 +24,13 @@ const GAME_DATA = {
     coreDrain:     1.5,   // 每个计算核心 能量/秒
     slotPerCore:   1,     // 每个核心提供 1 个算力槽
     droneRatePerProbe: 0.12, // 每个采集助手:给**每台探测器** +0.12 材料/秒(随规模一起涨,不然中后期很废)
-    decoderRate:   0.3,   // 每个解析器 数据/秒(用户反馈"数据太慢",0.2 → 0.3)
+      decoderRate:   0.45,  // 每个解析器 数据/秒(V0.2.4 方案 B:0.3 → 0.45,配合数据成本下降)
     repEvery:      4,     // 复制助手:每 4 秒自动复制一次
     repReserve:    3,     // 复制助手只在材料 ≥ 复制成本 × 3 时动手(不然会把材料吃光)
     warehouseCap:  200,   // 初始材料上限
     warehouseMul:  1.6,   // 每座仓库把上限 ×1.6
     // 星球探测进度(灵感 1):速率 = 探测器数 × scanK × (1 − 进度/scanFalloff) × (通信 ? 1 : scanNoCommMul)
-      scanK:         0.0065,   // V0.2.0:研究改成"需要时间"后,探测线要跟着调,两条线才一起收尾(见 docs/research.md 第 28 节)
+      scanK:         0.008,    // V0.2.4 方案 B:0.0065 → 0.008(见 docs/plan.md 的 V0.2.4 节)
       scanFalloff:   140,      // V0.2.0:200 → 140(逼近 100% 时更明显地减速)
     scanNoCommMul: 0.2,
     scanDecoderBonus: 0.12, // 每个"在跑的"解析器让探测速率 ×(1+0.12) ——
@@ -82,49 +82,50 @@ const GAME_DATA = {
   // 科技表(14 项;花费与节奏见 docs/research.md 第 12 / 19 节与第 28 节)
   // V0.2.0 起每个科技有两个新字段(用户拍板,见 docs/research.md 第 27.6 节 R3/R4):
   //   research  立项之后要研究多少秒才解锁(立项时先付花费,研究期间可以继续采矿/建造)
+  //             V0.2.4 方案 B:20+5n → 10+3n(研究不再拖节奏,见 docs/plan.md 的 V0.2.4 节)
   //   scanReq   需要探测进度先到这个百分比(0~100),否则显示"锁定";用来把科技线和探测线咬在一起
   //             (不写 = 没有扫描门槛)
   techs: [
-    { id: "click_mine", name: "简单采集", cat: "操作", cost: { material: 40 }, requires: [], research: 20,
+    { id: "click_mine", name: "简单采集", cat: "操作", cost: { material: 40 }, requires: [], research: 10,
       unlockCommand: "mine", effect: "解锁 /mine 的点击按钮",
       desc: "把采集流程固化成一个可反复调用的例程。" },
-    { id: "click_rep", name: "批量复制", cat: "操作", cost: { material: 140 }, requires: ["click_mine"], research: 25,
+    { id: "click_rep", name: "批量复制", cat: "操作", cost: { material: 140 }, requires: ["click_mine"], research: 13,
       unlockCommand: "replicate", effect: "解锁 /replicate 的点击按钮",
       desc: "把复制流程固化成一个可反复调用的例程。" },
-    { id: "reactor", name: "反应堆", cat: "硬件", cost: { material: 320 }, requires: ["click_rep"], research: 30,
+    { id: "reactor", name: "反应堆", cat: "硬件", cost: { material: 320 }, requires: ["click_rep"], research: 16,
       unlockBuilding: "reactor", effect: "可建造「反应堆」",
       desc: "重启休眠的聚变堆，可以获得额外的电力。" },
-    { id: "core", name: "计算核心", cat: "硬件", cost: { material: 620 }, requires: ["reactor"], research: 35,
+    { id: "core", name: "计算核心", cat: "硬件", cost: { material: 620 }, requires: ["reactor"], research: 19,
       unlockBuilding: "core", effect: "可建造「计算核心」",
       desc: "借用复制机构的空闲算力，跑一台协处理器。" },
-    { id: "decode", name: "信号解析", cat: "硬件", cost: { material: 560 }, requires: ["core"], research: 40,
+    { id: "decode", name: "信号解析", cat: "硬件", cost: { material: 560 }, requires: ["core"], research: 22,
       unlockModule: "decoder", unlockResource: "data", effect: "可安装「解析器」",
       desc: "重新接入那条没有收件人的广播，把它拆成可读的数据流。" },
-    { id: "drone", name: "无人采集", cat: "自动化", cost: { data: 3 }, requires: ["decode"], research: 45, scanReq: 2,
+    { id: "drone", name: "无人采集", cat: "自动化", cost: { data: 3 }, requires: ["decode"], research: 25, scanReq: 2,
       unlockModule: "drone", effect: "可安装「采集助手」",
       desc: "让机器自己去找矿，不必等操作者按下每一次采集。" },
-    { id: "comm", name: "长距离通信", cat: "通信", cost: { data: 6 }, requires: ["drone"], research: 50, scanReq: 8,
+    { id: "comm", name: "长距离通信", cat: "通信", cost: { data: 5 }, requires: ["drone"], research: 28, scanReq: 8,
       effect: "解除探测范围限制（×0.2 → ×1)",
       desc: "让探测器之间能长距离连接，离开基地。" },
-    { id: "autorep", name: "自主复制", cat: "自动化", cost: { data: 10 }, requires: ["comm"], research: 55, scanReq: 14,
+    { id: "autorep", name: "自主复制", cat: "自动化", cost: { data: 9 }, requires: ["comm"], research: 31, scanReq: 14,
       unlockModule: "rep", effect: "可安装「复制助手」",
       desc: "可以进行自主复制了。" },
-    { id: "probe_eff", name: "采集优化", cat: "产量", cost: { data: 16 }, requires: ["autorep"], research: 60, scanReq: 22,
+    { id: "probe_eff", name: "采集优化", cat: "产量", cost: { data: 14 }, requires: ["autorep"], research: 34, scanReq: 22,
       effect: "每台探测器产出 ×1.5",
       desc: "优化采集工作流，增加产出。" },
-    { id: "core_eff", name: "并行调度", cat: "软件", cost: { data: 26 }, requires: ["probe_eff"], research: 65, scanReq: 32,
+    { id: "core_eff", name: "并行调度", cat: "软件", cost: { data: 22 }, requires: ["probe_eff"], research: 37, scanReq: 32,
       effect: "每核心算力槽 ×2，耗能 ×0.8",
       desc: "让核心能够同时跑两条指令流，而且更省电。" },
-    { id: "decode_eff", name: "语义重构", cat: "解析", cost: { data: 38 }, requires: ["core_eff"], research: 70, scanReq: 45,
+    { id: "decode_eff", name: "语义重构", cat: "解析", cost: { data: 32 }, requires: ["core_eff"], research: 40, scanReq: 45,
       effect: "解析速率 ×1.6",
       desc: "不再逐字解析，而是猜整段的意思。" },
-    { id: "fusion", name: "聚变改良", cat: "能源", cost: { data: 55 }, requires: ["decode_eff"], research: 75, scanReq: 58,
+    { id: "fusion", name: "聚变改良", cat: "能源", cost: { data: 47 }, requires: ["decode_eff"], research: 43, scanReq: 58,
       effect: "反应堆输出 ×1.6",
       desc: "使用改良的聚变技术。" },
-    { id: "bootstrap", name: "递归自举", cat: "产量", cost: { data: 85 }, requires: ["fusion"], research: 80, scanReq: 68,
+    { id: "bootstrap", name: "递归自举", cat: "产量", cost: { data: 72 }, requires: ["fusion"], research: 46, scanReq: 68,
       effect: "每台探测器产出 ×2（累计 ×3)",
       desc: "复制机构开始复制自己的复制机构。" },
-    { id: "starship", name: "星际航行", cat: "结局", cost: { data: 120 }, requires: ["bootstrap"], research: 85, scanReq: 75,
+    { id: "starship", name: "星际航行", cat: "结局", cost: { data: 102 }, requires: ["bootstrap"], research: 49, scanReq: 75,
       secret: true, effect: "结局选择之一「前往太空」的前置",
       desc: "把复制机构从行星尺度改成恒星际尺度。" },
   ],
@@ -203,6 +204,22 @@ const GAME_DATA = {
       hint:  "返回终端",
       clickable: false,   // 不作为按钮出现
     },
+    // V0.2.4(用户选项 ②):复制助手的开关。装过「复制助手」之后才能用。
+    // 原来的办法是"在科技树里选中它、按空格" —— 那条路保留,但太隐蔽,所以补两条命令。
+    {
+      id:    "rep-off",
+      label: "/rep off",
+      hint:  "停用复制助手（不再自动复制）",
+      clickable: false,
+      requiresModule: "rep",   // 没装过就不该出现在补全里
+    },
+    {
+      id:    "rep-on",
+      label: "/rep on",
+      hint:  "重新启用复制助手",
+      clickable: false,
+      requiresModule: "rep",
+    },
     {
       id:    "stay",
       label: "/stay",
@@ -221,11 +238,18 @@ const GAME_DATA = {
   // 条件写法与 story 的 when 相同;满足条件的**最后一条**生效(和 guideHints 一样)
   idleHints: [
     { when: { commandsRun: 0 }, text: "指南：如果不知道做什么，可以输入 /mine 采集材料。" },
-    { when: { material: 40 },   text: "指南：材料够 40 了。输入 /research 打开科技树，先解锁「手动控制」。" },
+    { when: { material: 40 },   text: "指南：材料够 40 了。输入 /research 打开科技树，先解锁「简单采集」。" },
     { when: { material: 140 },  text: "指南：继续在科技树里解锁「批量复制」，以使用图形化界面进行复制。" },
     { when: { probes: 5 },      text: "指南：继续 /mine 与 /replicate ，探测器越多，探测进度和材料才能更快获取。" },
     { when: { material: 320 },  text: "指南：去科技树解锁并建造「反应堆」，发展科技不能只靠应急反应堆来供能。" },
     { when: { unlocked: "core" }, text: "指南：算力槽是有限资源。优先分配给「解析器」，数据才能开始积累。" },
+    // V0.2.4(S20):按阶段补几条 —— 原来只有 6 条,中后期闲置时无话可说
+    { when: { researching: true }, text: "指南：研究进行中。这段时间可以继续 /mine、建造或复制 —— 不用在科技树里等。" },
+    { when: { unlocked: "decode" }, text: "指南：数据是研究货币。多装几个「解析器」，数据产出会更快。" },
+    { when: { scan: 13 },       text: "指南：本地快扫完了。去科技树研究「长距离通信」，探测范围才能扩展。" },
+    { when: { unlocked: "drone" }, text: "指南：采集助手占算力槽，但它给每台探测器都加产出 —— 探测器越多越划算。" },
+    { when: { scan: 40 },       text: "指南：中段了。继续复制探测器，探测进度靠台数推进。" },
+    { when: { scan: 75 },       text: "指南：找到「回声塔」了。可以输入 /stay 或 /go 做选择（/go 需要先研究「星际航行」）。" },
   ],
 
   // 剧情 / 引导:一串"节点",按表内顺序检查,条件满足就打出来。
@@ -430,6 +454,8 @@ const GAME_DATA = {
     { when: { scan: 5 },             text: "探测进度靠探测器数量提速，扫描范围要靠「长距离通信」扩展" },
     // V0.2.0:研究要花时间,这段时间要明确告诉玩家"不用在科技树里等"
     { when: { researching: true },   text: "研究进行中。可以继续 /mine、建造或复制，时间到自动完成" },
+    // V0.2.4:复制助手能关(用户报"不能关闭")—— 在提示里直接给出命令
+    { when: { module: "rep" },       text: "复制助手在自动花钱复制。不想要就输入 /rep off 停用（/rep on 重新启用）" },
   ],
 
   // 设置项(音量)。以后要加新的音频开关,在这里加一行即可。
@@ -437,6 +463,12 @@ const GAME_DATA = {
     { id: "music", label: "音乐音量" },
     { id: "sfx",   label: "音效音量" },
   ],
+
+  // 打字机的节奏(S21)。单位毫秒/字。
+  //   human  = 人类残片:慢,更接近"有人一笔一笔写下来"(28~35ms/字 + 抖动是研究里的目标;
+  //            终端一行放不下会折行,取 32ms 并在 game.js 里加了轻微抖动)
+  //   machine= 机器日志 / 例行信息:快,别让玩家等
+  lineDelays: { human: 32, machine: 12, boot: 9, default: 12 },
 
   // 侧栏读数面板的悬停说明
   panelHints: {
@@ -464,5 +496,27 @@ const GAME_DATA = {
       locked: "前置未满足：",
       poor: "资源不足。",
     },
+  },
+
+  // ============================================================
+  // 作者的话(S19)。**这是留给"你"写文字的地方** —— 接口已经做好:
+  // 结局结算画面上的 [ 作者的话 ] 按钮 → 打开这个页面;看完 / 按 Esc 返回;
+  // 打开过一次就记下 readAuthorsNote(成就「作者的话」靠它解锁)。
+  //
+  // 怎么写:title 是页头那句;lines 一行一条,支持 { text, cls }(cls 可省略)。
+  //   cls: "dim" 暗色 / "relic" 暖色(人类遗物) / "ach" 成就色 —— 现在写的是占位,直接换掉即可。
+  //   paragraphs 是空行(排版用),也可以整段删掉。
+  // ============================================================
+  authorsNote: {
+    title: "作者的话",
+    lines: [
+      { text: "（这里是占位文本，等你写。）", cls: "dim" },
+      { text: "" },
+      { text: "感谢游玩《星海漫游》。", },
+      { text: "这是一台机器的故事，也是写下它的人想说的话。", cls: "dim" },
+      { text: "" },
+      { text: "—— 期待你的定稿。", cls: "relic" },
+    ],
+    foot: "[ Esc 或 /back 返回 ]",
   },
 };

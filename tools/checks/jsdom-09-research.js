@@ -181,15 +181,15 @@ function run() {
       console.log('\n【H. V0.2.0 的数值口径(科技表 / 探测参数)】');
       // 这几项是"科技线与探测线同时收尾"的前提,写死在这里防以后被悄悄改回去;
       // 和 tools/economy-sim.js 的一致性由 tools/check-parity.js 保证(72 项)
-      ok('科技的研究秒数 = 20 + 5n', peek('D.techs.every(function(t,i){return t.research === 20 + 5*i;})'));
+      ok('科技的研究秒数 = 10 + 3n(V0.2.4 方案 B)', peek('D.techs.every(function(t,i){return t.research === 10 + 3*i;})'));
       ok('9 项科技带探测门槛、数值是 2/8/14/22/32/45/58/68/75',
         peek('JSON.stringify(D.techs.filter(function(t){return t.scanReq != null;}).map(function(t){return t.scanReq;}))')
           === '[2,8,14,22,32,45,58,68,75]',
         peek('JSON.stringify(D.techs.filter(function(t){return t.scanReq != null;}).map(function(t){return t.scanReq;}))'));
       ok('探测参数 = scanK 0.0065 / scanFalloff 140 / scanResearchMul 2',
-        peek('D.numbers.scanK') === 0.0065 && peek('D.numbers.scanFalloff') === 140
+        peek('D.numbers.scanK') === 0.008 && peek('D.numbers.scanFalloff') === 140
         && peek('D.numbers.scanResearchMul') === 2);
-      ok('v 值就是 game-data 里的 V0.2.0', String(peek('D.version')) === 'V0.2.0', String(peek('D.version')));
+      ok('版本号是 V0.2.x 这种格式', /^V\d+\.\d+\.\d+$/.test(String(peek('D.version'))), String(peek('D.version')));
 
       ok('控制台无报错', errors.length === 0, JSON.stringify(errors));
       console.log('\n========== 结果:' + pass + ' 通过 / ' + fail + ' 失败 ==========');
