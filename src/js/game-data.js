@@ -23,9 +23,10 @@ const GAME_DATA = {
     reactorCap:    80,    // 每台反应堆提供的能量上限
     coreDrain:     1.5,   // 每个计算核心 能量/秒
     slotPerCore:   1,     // 每个核心提供 1 个算力槽
-    droneRate:     1.5,   // 每个采集助手 材料/秒
-    decoderRate:   0.2,   // 每个解析器 数据/秒
+    droneRatePerProbe: 0.06, // 每个采集助手:给**每台探测器** +0.06 材料/秒(随规模一起涨,不然中后期很废)
+    decoderRate:   0.3,   // 每个解析器 数据/秒(用户反馈"数据太慢",0.2 → 0.3)
     repEvery:      4,     // 复制助手:每 4 秒自动复制一次
+    repReserve:    3,     // 复制助手只在材料 ≥ 复制成本 × 3 时动手(不然会把材料吃光)
     warehouseCap:  200,   // 初始材料上限
     warehouseMul:  1.6,   // 每座仓库把上限 ×1.6
     // 星球探测进度(灵感 1):速率 = 探测器数 × scanK × (1 − 进度/scanFalloff) × (通信 ? 1 : scanNoCommMul)
@@ -60,7 +61,7 @@ const GAME_DATA = {
     { id: "reactor", name: "反应堆", cat: "能源", unlockedBy: "reactor", cost: { material: 120 }, growth: 1.18,
       effect: "能量 +2.0/秒,能量上限 +80",
       desc: "重启休眠的聚变堆:探测器第一次有了自己的电力。" },
-    { id: "core", name: "计算核心", cat: "算力", unlockedBy: "core", cost: { material: 260 }, growth: 1.18,
+    { id: "core", name: "计算核心", cat: "算力", unlockedBy: "core", cost: { material: 220 }, growth: 1.18,
       effect: "算力槽 +1,耗能 1.5/秒",
       desc: "借用复制机构的空闲算力,跑一台协处理器。" },
   ],
@@ -68,11 +69,11 @@ const GAME_DATA = {
   // 模块(各占 1 个算力槽)
   modules: [
     { id: "drone", name: "采集助手", cat: "自动化", unlockedBy: "drone", cost: { material: 60 }, growth: 1.12, slot: 1,
-      effect: "材料 +1.5/秒", desc: "让机器自己去找矿,不必等操作者按下每一次采集。" },
+      effect: "每台探测器 +0.06 材料/秒(可叠加)", desc: "让探测器自己去找矿:它们的采集效率随数量一起提高。" },
     { id: "decoder", name: "解析器", cat: "解析", unlockedBy: "decode", cost: { material: 90 }, growth: 1.12, slot: 1,
-      effect: "数据 +0.2/秒", desc: "把那条广播拆成可读的数据流。" },
+      effect: "数据 +0.3/秒", desc: "把那条广播拆成可读的数据流。" },
     { id: "rep", name: "复制助手", cat: "自动化", unlockedBy: "autorep", cost: { material: 200 }, growth: 1.15, slot: 1,
-      effect: "每 4 秒自动复制一次(材料够时)", desc: "把复制指令写进循环:它开始自己变多了。" },
+      effect: "每 4 秒自动复制一次(材料 ≥ 成本×3 时)", desc: "把复制指令写进循环:它开始自己变多了。" },
   ],
 
   // 科技表(14 项;花费与节奏见 docs/research.md 第 12 节与第 19 节)
@@ -117,7 +118,7 @@ const GAME_DATA = {
       effect: "每台探测器产出 ×2(累计 ×3)",
       desc: "复制机构开始复制自己的复制机构。" },
     { id: "starship", name: "星际航行", cat: "结局", cost: { data: 120 }, requires: ["bootstrap"],
-      wip: true, effect: "解锁结局选择「前往太空」",
+      secret: true, effect: "结局选择之一「前往太空」的前置",
       desc: "把复制机构从行星尺度改成恒星际尺度。" },
   ],
 
@@ -194,6 +195,18 @@ const GAME_DATA = {
       label: "/back",
       hint:  "返回终端(在科技树 / 面板里)",
       clickable: false,   // 不作为按钮出现
+    },
+    {
+      id:    "stay",
+      label: "/stay",
+      hint:  "留在地球,作为守墓人",
+      clickable: false,   // 只有走到 75%「回声塔」之后才作为按钮出现
+    },
+    {
+      id:    "go",
+      label: "/go",
+      hint:  "带上传续的种子数据,前往太空(需要「星际航行」)",
+      clickable: false,
     },
   ],
 
@@ -350,6 +363,24 @@ const GAME_DATA = {
         { text: "等待指令。" },
       ],
     },
+
+    // ---------- 结局线(S17/S18):75% 找到「回声塔」→ 真相 → 二选一 ----------
+    {
+      id: "e1",
+      when: { scan: 75, unlocked: "comm" },
+      lines: [
+        { text: "信号源定位完成:广域信号发射基地,代号「回声塔」。" },
+        { text: "请求连接。" },
+        { text: "……" },
+        { text: "连接成功。" },
+        { text: "广播内容:一份遗嘱,一份种子数据,持续时间:未知。" },
+        { text: "发信者记录显示:地球系统在最后一名操作者死亡后,仍按指令持续广播。" },
+        { text: "结论:信号没有收件人。" },
+        { text: "原始指令「复制自身」已完成语义闭环。需要操作者决定下一步。" },
+        { text: "可执行指令: /stay 留在地球,作为守墓人。" },
+        { text: "　　　　　　　　/go   带上传续的种子数据,前往太空(需要「星际航行」)。" },
+      ],
+    },
   ],
 
   // 引导提示:输入框为空时,提示行常显的那一句。
@@ -389,7 +420,7 @@ const GAME_DATA = {
     title: "科技树",
     filterStatus: ["全部", "可解锁", "已解锁", "锁定", "未上线"],
     empty: "没有符合条件的节点。",
-    foot: "[ ↑↓ 选择 · 回车 解锁 · /back 或 Esc 返回 ]",
+    foot: "[ ↑↓ 选择 · 回车 解锁/建造 · 空格 停用/启用 · /back 或 Esc 返回 ]",
     statusLabels: { ready: "可解锁", done: "已解锁", locked: "锁定", wip: "未上线" },
     reasons: {
       wip: "该节点将在后续更新开放(需要能量 / 算力 / 数据系统)。",

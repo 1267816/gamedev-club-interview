@@ -58,6 +58,19 @@
     </div>
   </div>
 
+  <!-- 结局结算(S18):可以继续运行,也可以回到选择时刻重选 -->
+  <div id="ending" class="hidden">
+    <div class="panel">
+      <div class="panel-title" id="end-title">结局</div>
+      <div class="panel-note" id="end-note"></div>
+      <div class="panel-menu">
+        <button id="btn-end-continue">[ 继续运行 ]</button>
+        <button id="btn-end-choice">[ 回到选择时刻 ]</button>
+        <button id="btn-end-back">[ 返回封面 ]</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 游戏主界面 -->
   <div id="screen" class="hidden">
 
@@ -89,6 +102,7 @@
   <div id="tech" class="hidden">
     <header id="tech-header">
       <span id="tech-title">科技树</span>
+      <span id="tech-res"></span>
       <span id="tech-count">已解锁 0 / 0</span>
     </header>
     <div id="tech-filters">

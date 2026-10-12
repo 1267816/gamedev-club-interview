@@ -197,7 +197,7 @@ body::after {
 .cover-version { color: var(--dim); font-size: 13px; }
 
 /* ---------- 设置 / 退出等面板 ---------- */
-#settings, #quit, #achievements {
+#settings, #quit, #achievements, #ending {
   height: 100vh;
   display: flex;
   align-items: center;

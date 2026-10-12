@@ -35,12 +35,13 @@ const P = {
   reactorCap: 80,        // 每台提供的能量上限
 
   // ---- 算力层(槽位) ----
-  coreCost: 260, coreGrowth: 1.18, coreDrain: 1.5, coreSlots: 1,
+  coreCost: 220, coreGrowth: 1.18, coreDrain: 1.5, coreSlots: 1,
 
   // ---- 模块(各占 1 算力槽) ----
-  droneCost: 60,  droneGrowth: 1.12, droneRate: 1.5,     // 采集助手
-  decoderCost: 90, decoderGrowth: 1.12, decoderRate: 0.2, // 解析器 → 数据
-  repCost: 200, repGrowth: 1.15, repEvery: 4,            // 复制助手:每 4 秒自动复制
+  droneCost: 60,  droneGrowth: 1.12, droneRatePerProbe: 0.06, // 采集助手:每台探测器 +0.06 材料/秒
+  decoderCost: 90, decoderGrowth: 1.12, decoderRate: 0.3,     // 解析器 → 数据
+  repCost: 200, repGrowth: 1.15, repEvery: 4,                 // 复制助手:每 4 秒自动复制
+  repReserve: 3,                                             // 只在材料 ≥ 成本×3 时动手
 
   // ---- 仓库:材料必须有地方放(D5 灵感 5) ----
   whCost: 120, whGrowth: 1.16, whBaseCap: 200, whCapMul: 1.6,
@@ -125,7 +126,7 @@ function physical(s, dt) {
   if (s.manualLeft > 0) s.manualLeft -= dt;
   const manual = s.manualLeft > 0 ? 1 : 0;
   const cap = matCap(s.warehouses);
-  const matRate = s.probes * P.probeOutput * s.probeMul + manual + s.drones * P.droneRate;
+  const matRate = s.probes * (P.probeOutput * s.probeMul + P.droneRatePerProbe * s.drones) + manual;
   s.material = Math.min(s.material + matRate * dt, cap);
   s.capped = s.material >= cap - 1e-9 && matRate > 0;
 
@@ -146,7 +147,7 @@ function physical(s, dt) {
     while (s.repTimer >= P.repEvery) {
       s.repTimer -= P.repEvery;
       const c = probeCost(s.probes - 1);
-      if (s.material >= c) { s.material -= c; s.probes += 1; }
+      if (s.material >= c * P.repReserve) { s.material -= c; s.probes += 1; }
     }
   }
   const scanMul = s.unlocked.comm ? 1 : P.scanNoCommMul;
