@@ -140,6 +140,7 @@ body::after {
 }
 
 .row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.row.warn b { color: var(--err); }   /* 仓库满了:这行标红,提示"攒不下了" */
 .bar { letter-spacing: 1px; margin: 2px 0 10px; }
 
 /* 界面切换:隐藏 */
@@ -299,12 +300,15 @@ body::after {
 .tech-item .t-cat    { width: 4em; color: var(--dim); }
 .tech-item .t-status { width: 4em; }
 .tech-item .t-cost   { width: 9em; color: var(--accent); }
+.tech-item .t-cost.over { color: var(--err); }   /* 花费超过仓库上限 → 先扩建仓库 */
 .tech-item .t-effect { color: var(--dim); }
 .tech-item.st-ready  .t-status { color: var(--fg); }
 .tech-item.st-done   .t-status { color: var(--dim); }
 .tech-item.st-locked .t-status,
 .tech-item.st-wip    .t-status { color: var(--dim); }
+.tech-item.st-noslot .t-status { color: var(--err); }
 .tech-item.st-done   .t-name   { color: var(--dim); }
+.tech-item .t-name   { overflow: hidden; text-overflow: ellipsis; }
 
 #tech-detail { min-height: 6.4em; color: var(--dim); }
 #tech-detail .d-name { color: var(--fg); }

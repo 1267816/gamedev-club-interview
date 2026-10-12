@@ -8,8 +8,13 @@ const D = GAME_DATA;
 
 /* ---------- 1. 状态:所有会变的东西都在这一个对象里 ---------- */
 const game = {
-  material: 0,          // 材料
+  material: 0,          // 材料(存量,受仓库上限)
+  energy:   0,          // 能量(存量,上限由反应堆给)      —— V0.1.2
+  data:     0,          // 数据(存量,解析器产出)          —— V0.1.2
   probes:   1,          // 探测器数量
+  scan:     0,          // 星球探测进度 0~100             —— V0.1.2
+  buildings: {},        // 建筑数量,如 { reactor: 2, core: 1 }  —— V0.1.2
+  modules:   {},        // 模块数量,如 { drone: 2, decoder: 1 } —— V0.1.2
   timeSec:  0,          // 游戏内经过的秒数
   lastTick: Date.now(), // 上一次推进的真实时刻
   commandsRun: 0,       // 已执行命令数(剧情触发用)
@@ -27,8 +32,42 @@ let bootDone = false;
 let running = false;
 
 // 由状态"算出来"的值,不存起来,每次现算,避免前后不一致
-function perSecond() {
-  return game.probes * D.numbers.probeOutput;
+const has = function (id) { return game.unlocked.indexOf(id) >= 0; };
+const bCount = function (id) { return game.buildings[id] || 0; };
+const mCount = function (id) { return game.modules[id] || 0; };
+
+// 科技给出的乘算倍率(第 11.2 节的"倍增定律":效果必须是乘算)
+function effects() {
+  let probeMul = 1, slotMul = 1, reactorMul = 1, drainMul = 1, decodeMul = 1;
+  if (has('probe_eff'))  probeMul *= 1.5;
+  if (has('core_eff'))   { slotMul *= 2; drainMul *= 0.8; }
+  if (has('decode_eff')) decodeMul *= 1.6;
+  if (has('fusion'))     reactorMul *= 1.6;
+  if (has('bootstrap'))  probeMul *= 2;
+  return { probeMul: probeMul, slotMul: slotMul, reactorMul: reactorMul, drainMul: drainMul, decodeMul: decodeMul };
+}
+
+// —— 各资源的速率 / 上限 ——
+function matCap()      { return D.numbers.warehouseCap * Math.pow(D.numbers.warehouseMul, bCount('warehouse')); }
+function matRate()     { return game.probes * D.numbers.probeOutput * effects().probeMul + mCount('drone') * D.numbers.droneRate; }
+function energyGross() { return bCount('reactor') * D.numbers.reactorRate * effects().reactorMul; }
+function energyNeed()  { return bCount('core') * D.numbers.coreDrain * effects().drainMul; }
+function slotsUsed()   { return mCount('drone') + mCount('decoder') + mCount('rep'); }
+function slotsTotal()  { return Math.floor(bCount('core') * D.numbers.slotPerCore * effects().slotMul * energyScale); }
+function dataRate()    { return mCount('decoder') * D.numbers.decoderRate * effects().decodeMul; }
+
+// 复制的成本:10 × 1.10^(已经有的台数 - 1) —— V0.1.2 改成几何增长(bug 1 的修复)
+function probeCost() { return D.numbers.probeBaseCost * Math.pow(D.numbers.probeGrowth, game.probes - 1); }
+
+// 建筑 / 模块的第 n 个成本(几何增长)
+function buildCostOf(table, id, count) {
+  const x = D[table].find(function (y) { return y.id === id; });
+  return Math.floor(x.cost.material * Math.pow(x.growth, count));
+}
+function costOf(node) {
+  if (node.kind === 'tech') return node.cost;
+  const count = node.kind === 'building' ? bCount(node.id) : mCount(node.id);
+  return { material: buildCostOf(node.kind === 'building' ? 'buildings' : 'modules', node.id, count) };
 }
 
 /* ---------- 字符解析系统:上线前,所有文字一律显示为 ? ---------- */
@@ -149,14 +188,50 @@ document.addEventListener('click', function () { skip = true; });
 /* ---------- 3. 推进:按"真实经过的时间"算 ---------- */
 // 关键:不数"跳了几次",而是量"过了多久"。
 // 这样即使切到别的标签页、浏览器把定时器降频,收益也不会算错。
+let energyScale = 1;    // 能量节流系数(0~1):能量不够时算力槽按比例减少
+let repTimer = 0;       // 复制助手的计时器
+
 function tick() {
   const now = Date.now();
   const dt  = Math.min((now - game.lastTick) / 1000, 5); // 一次最多补 5 秒
   game.lastTick = now;
   if (!running) return;          // 封面 / 未开始时,时间不流动
   game.timeSec += dt;
-  game.material += perSecond() * dt;
+
+  // ① 材料:探测器 + 采集助手;超过仓库上限的部分会被浪费
+  const cap = matCap();
+  game.material = Math.min(game.material + matRate() * dt, cap);
+
+  // ② 能量:反应堆产出、计算核心消耗;不够就按比例节流(算力降速)
+  const gross = energyGross();
+  const need  = energyNeed();
+  const eCap  = bCount('reactor') * D.numbers.reactorCap;
+  const usable = Math.min(game.energy / dt + gross, need);
+  energyScale = need > 0 ? usable / need : 1;
+  game.energy = Math.min(Math.max(game.energy + (gross - usable) * dt, 0), eCap);
+
+  // ③ 数据:解析器产出
+  game.data += dataRate() * dt;
+
+  // ④ 复制助手:每 repEvery 秒自动复制一次(材料够才买)
+  if (mCount('rep') > 0) {
+    repTimer += dt * mCount('rep');
+    while (repTimer >= D.numbers.repEvery) {
+      repTimer -= D.numbers.repEvery;
+      const c = probeCost();
+      if (game.material >= c) { game.material -= c; game.probes += 1; }
+    }
+  }
+
+  // ⑤ 星球探测进度:探测器越多越快;覆盖率越接近满越难扫
+  if (game.scan < 100) {
+    const scanMul = has('comm') ? 1 : D.numbers.scanNoCommMul;
+    const falloff = Math.max(0.25, 1 - game.scan / D.numbers.scanFalloff);
+    game.scan = Math.min(100, game.scan + game.probes * D.numbers.scanK * scanMul * falloff * dt);
+  }
+
   checkStory();                  // 数值一达标,剧情 / 引导就顺着打出来
+  checkAchievements();           // 探测进度 / 探测器数量这类"自己会涨"的条件也要一直盯着
   checkIdle();                   // 太久没动 → 指南系统提示一句
   render();
 }
@@ -205,18 +280,37 @@ function render() {
   headerTitle.textContent = T(D.title);
   headerTime.textContent = T('T+' + fmtTime(game.timeSec));
 
-  // 右侧读数:数字 + 朝向"下一次复制"的 ASCII 进度条
-  const need   = D.numbers.replicateCost;
-  const filled = Math.round(Math.min(1, game.material / need) * 12);
+  // 右侧读数:上面是"星球探测进度"条(Q5:替换原来的"下次复制"进度条),
+  // 下面按进度逐行解锁:材料 → 探测器 / 产出 → 能量 → 算力 → 数据 → 科技
+  const filled = Math.round(Math.min(1, game.scan / 100) * 12);
   const bar    = '█'.repeat(filled) + '░'.repeat(12 - filled);
+  const rows = [];
+  const row = function (label, value, hintKey, warn) {
+    rows.push('<div class="row' + (warn ? ' warn' : '') + '" data-hint="' + D.panelHints[hintKey] + '"><span>'
+      + T(label) + '</span><b>' + T(value) + '</b></div>');
+  };
 
-  const techUnlocked = game.unlocked.length;
-  readoutEl.innerHTML =
-      '<div class="row" data-hint="' + D.panelHints.material + '"><span>' + T('材料') + '</span><b>' + T(fmtNum(game.material)) + '</b></div>'
-    + '<div class="bar" data-hint="' + D.panelHints.progress + '">' + T(bar) + '</div>'
-    + '<div class="row" data-hint="' + D.panelHints.probes + '"><span>' + T('探测器') + '</span><b>' + T(fmtNum(game.probes) + ' 台') + '</b></div>'
-    + '<div class="row" data-hint="' + D.panelHints.output + '"><span>' + T('产出') + '</span><b>' + T(fmtNum(perSecond()) + ' /秒') + '</b></div>'
-    + '<div class="row" data-hint="' + D.panelHints.tech + '"><span>' + T('科技') + '</span><b>' + T(techUnlocked + ' / ' + D.techs.length) + '</b></div>';
+  // 仓库满了就把这行标红:否则玩家会盯着满仓材料不知道"最高只能攒这么多"
+  row('材料', fmtNum(game.material) + ' / ' + fmtNum(matCap()), 'material', game.material >= matCap() - 0.01);
+  rows.push('<div class="bar" data-hint="' + D.panelHints.scan + '">' + T(bar + ' ' + game.scan.toFixed(1) + '%') + '</div>');
+  row('探测器', fmtNum(game.probes) + ' 台', 'probes');
+  row('产出', fmtNum(matRate()) + ' /秒', 'output');
+
+  if (has('reactor')) {
+    const net = energyGross() - energyNeed();
+    row('能量', Math.floor(game.energy) + ' / ' + fmtNum(bCount('reactor') * D.numbers.reactorCap)
+      + ' (' + (net >= 0 ? '+' : '') + net.toFixed(1) + '/s)', 'energy');
+  }
+  if (has('core')) {
+    const total = Math.floor(bCount('core') * D.numbers.slotPerCore * effects().slotMul * energyScale);
+    // 正常玩不会超(装模块时拦了),但读档/改档可能超 —— 超了要明说,不然"6 / 3"看不懂
+    const over = slotsUsed() > total;
+    row('算力', slotsUsed() + ' / ' + total + ' 槽' + (over ? '(超载!)' : ''), 'compute', over);
+  }
+  if (has('decode')) row('数据', fmtNum(game.data) + ' (+' + dataRate().toFixed(2) + '/s)', 'data');
+  row('科技', game.unlocked.length + ' / ' + D.techs.length, 'tech');
+
+  readoutEl.innerHTML = rows.join('');
 
   // 命令按钮的可用状态
   for (const c of D.commands) {
@@ -235,10 +329,13 @@ function storyReady(when) {
   const w = when || {};
   if (w.onBoot && !bootDone) return false;
   if (w.after  && game.fired.indexOf(w.after) < 0) return false;
+  if (w.unlocked    && !has(w.unlocked)) return false;
+  if (w.unlockedAll && !w.unlockedAll.every(has)) return false;
   if (w.commandsRun != null && game.commandsRun < w.commandsRun) return false;
   if (w.material    != null && game.material    < w.material)    return false;
   if (w.probes      != null && game.probes      < w.probes)      return false;
   if (w.timeSec     != null && game.timeSec     < w.timeSec)     return false;
+  if (w.scan        != null && game.scan        < w.scan)        return false;
   return true;
 }
 
@@ -307,14 +404,20 @@ function buildCommands() {
     btn.textContent = '[ ' + c.label + ' ]';
     btn.onclick = function () { runCommand(c.id); };
     // 用终端内建提示行,替代延迟长、样式不统一的浏览器原生 tooltip
-    btn.onmouseenter = function () { setHint(c.hint); };
+    // 复制成本是动态的(V0.1.2 起几何增长),所以悬停时现算一句
+    btn.onmouseenter = function () { setHint(commandHint(c)); };
     btn.onmouseleave = function () { setHint(''); };
-    btn.onfocus      = function () { setHint(c.hint); };
+    btn.onfocus      = function () { setHint(commandHint(c)); };
     btn.onblur       = function () { setHint(''); };
     cmdEl.appendChild(btn);
   }
   setInputEnabled(true);
   render();
+}
+
+function commandHint(c) {
+  if (c.id === 'replicate') return '消耗 ' + fmtNum(probeCost()) + ' 材料,复制一个探测器(每复制一次成本 ×1.10)';
+  return c.hint;
 }
 
 /* ---------- 命令行:输入 + 命令面板 + Tab 补全 ---------- */
@@ -431,9 +534,9 @@ function runCommand(id) {
     log('+1 材料', { cls: 'dim', instant: true, group: 'mine' });
 
   } else if (id === 'replicate') {
-    const cost = D.numbers.replicateCost;
+    const cost = probeCost();   // V0.1.2:成本几何增长(10 × 1.10^n)
     if (game.material < cost) {
-      log('材料不足:需要 ' + cost + ' 材料。', { cls: 'err', instant: true });
+      log('材料不足:需要 ' + fmtNum(cost) + ' 材料。', { cls: 'err', instant: true });
     } else {
       game.material -= cost;
       game.probes  += 1;
@@ -475,11 +578,40 @@ let techVisible = false;                                       // 科技树是�
 let techSel = 0;                                               // 选中项(筛选后列表里的序号)
 const techFilter = { status: "全部", cat: "全部", text: "" };   // 三筛选器
 
-// 节点状态:done 已解锁 / ready 可解锁(前置满足) / locked 前置没满足 / wip 还没上线
+/* 列表 = 科技 + 建筑 + 模块,统一成同一个"节点"形状:
+   { kind:'tech'|'building'|'module', id, name, cat, cost, effect, desc, status }
+   状态:tech 用 done / ready / locked / wip;建筑与模块用 ready(可建造)/ locked(还没解锁该科技)。
+   建筑与模块排在"解锁它的那个科技"后面一行 —— 这样读起来就是一棵树。 */
+function viewNodes() {
+  const out = [];
+  for (const t of D.techs) {
+    out.push({ kind: 'tech', id: t.id, name: t.name, cat: t.cat, cost: t.cost,
+      effect: t.effect, desc: t.desc, status: techStatusOf(t), requires: t.requires, wip: !!t.wip });
+    for (const b of D.buildings) if (b.unlockedBy === t.id) out.push(buildNode(b, 'building'));
+    for (const m of D.modules)   if (m.unlockedBy === t.id) out.push(buildNode(m, 'module'));
+  }
+  return out;
+}
+
+function buildNode(x, kind) {
+  const count = kind === 'building' ? bCount(x.id) : mCount(x.id);
+  const unlocked = has(x.unlockedBy);
+  // 模块要占算力槽:槽满时也不能再装
+  const slotFull = (kind === 'module') && unlocked && slotsUsed() >= slotsTotal();
+  return {
+    kind: kind, id: x.id, name: x.name, cat: x.cat,
+    effect: x.effect, desc: x.desc,
+    count: count,
+    status: !unlocked ? 'locked' : (slotFull ? 'noslot' : 'ready'),
+    unlockedBy: x.unlockedBy,
+  };
+}
+
+// 科技节点状态:done 已解锁 / ready 可解锁(前置满足) / locked 前置没满足 / wip 还没上线
 function techStatusOf(t) {
-  if (game.unlocked.indexOf(t.id) >= 0) return 'done';
+  if (has(t.id)) return 'done';
   if (t.wip) return 'wip';
-  if (t.requires.some(function (r) { return game.unlocked.indexOf(r) < 0; })) return 'locked';
+  if (t.requires.some(function (r) { return !has(r); })) return 'locked';
   return 'ready';
 }
 
@@ -488,32 +620,56 @@ function resName(id) {
   return r ? r.name : id;
 }
 
-function techCostOf(t) {
+function costText(cost) {
   const parts = [];
-  for (const k in t.cost) parts.push(resName(k) + " " + fmtNum(t.cost[k]));
+  for (const k in cost) parts.push(resName(k) + " " + fmtNum(cost[k]));
   return parts.join(" + ");
 }
 
-// 现在只有材料能花;能量 / 算力 / 数据要等对应系统上线
-function techAffordable(t) {
-  return (t.cost.material || 0) <= game.material;
+function nodeCost(node) {
+  return node.kind === 'tech' ? node.cost : costOf(node);
 }
 
-function techMatches(t) {
-  const st = techStatusOf(t);
-  if (techFilter.status !== "全部" && techFilter.status !== D.techView.statusLabels[st]) return false;
-  if (techFilter.cat !== "全部" && t.cat !== techFilter.cat) return false;
+function nodeAffordable(node) {
+  const c = nodeCost(node);
+  return (c.material || 0) <= game.material && (c.data || 0) <= game.data;
+}
+
+// 花费超过了仓库上限 → 永远攒不出来。这种"被上限卡住"和"钱还不够"要分开讲,
+// 不然玩家会盯着满仓的材料发懵(仓库上限是 D5 决策里的一条硬规则)。
+function overCapText(node) {
+  const c = nodeCost(node);
+  return (c.material || 0) > matCap();
+}
+
+// 状态在筛选器里归到哪个 tab(建筑/模块的"可建造"归到"可解锁")
+function statusTab(node) {
+  if (node.kind === 'tech') return D.techView.statusLabels[node.status];
+  return node.status === 'locked' ? "锁定" : "可解锁";
+}
+
+// 状态在列表里显示成什么字
+function statusLabelOf(node) {
+  if (node.kind === 'tech') return D.techView.statusLabels[node.status];
+  if (node.status === 'locked') return "锁定";
+  if (node.status === 'noslot') return "槽位已满";
+  return "可建造";
+}
+
+function techMatches(node) {
+  if (techFilter.status !== "全部" && techFilter.status !== statusTab(node)) return false;
+  if (techFilter.cat !== "全部" && node.cat !== techFilter.cat) return false;
   const q = techFilter.text.trim().toLowerCase();
-  if (q && (t.name + t.cat + t.desc + t.effect).toLowerCase().indexOf(q) < 0) return false;
+  if (q && (node.name + node.cat + node.desc + node.effect).toLowerCase().indexOf(q) < 0) return false;
   return true;
 }
 
-// 排序:可解锁 → 已解锁 → 锁定 → 未上线;同级按表内顺序(表 = 设计里的推进顺序)
-const TECH_RANK = { ready: 0, done: 1, locked: 2, wip: 3 };
+// 排序:可解锁/可建造 → 已解锁 → 锁定 → 未上线;同级按树的自然顺序
+const TECH_RANK = { ready: 0, noslot: 0, done: 1, locked: 2, wip: 3 };
 function visibleTechs() {
-  return D.techs.filter(techMatches).sort(function (a, b) {
-    return (TECH_RANK[techStatusOf(a)] - TECH_RANK[techStatusOf(b)])
-        || (D.techs.indexOf(a) - D.techs.indexOf(b));
+  const all = viewNodes();
+  return all.filter(techMatches).sort(function (a, b) {
+    return (TECH_RANK[a.status] - TECH_RANK[b.status]) || (all.indexOf(a) - all.indexOf(b));
   });
 }
 
@@ -528,7 +684,7 @@ function renderTechFilters() {
   });
   techCatsEl.innerHTML = '';
   const cats = ["全部"];
-  for (const t of D.techs) if (cats.indexOf(t.cat) < 0) cats.push(t.cat);
+  for (const n of viewNodes()) if (cats.indexOf(n.cat) < 0) cats.push(n.cat);
   cats.forEach(function (s) {
     const c = document.createElement('span');
     c.className = 'chip' + (techFilter.cat === s ? ' on' : '');
@@ -542,20 +698,21 @@ function techHint(text) { techHintEl.textContent = text || ''; }
 
 function renderTechDetail() {
   const list = visibleTechs();
-  const t = list[techSel];
-  if (!t) { techDetailEl.innerHTML = ''; return; }
-  const st = techStatusOf(t);
+  const node = list[techSel];
+  if (!node) { techDetailEl.innerHTML = ''; return; }
+  const done = node.status === 'done';
+  const built = node.count ? ' · 已建造 ' + node.count + ' 座' : '';
   techDetailEl.innerHTML =
-      '<div class="d-line"><span class="d-name">' + t.name + '</span> · ' + t.cat + ' · '
-      + D.techView.statusLabels[st] + ' · ' + techCostOf(t) + '</div>'
-    + '<div class="d-line">效果:' + t.effect + '</div>'
-    + '<div class="d-line">' + t.desc + '</div>'
+      '<div class="d-line"><span class="d-name">' + node.name + '</span> · ' + node.cat + ' · '
+      + statusLabelOf(node) + built + (done ? '' : ' · ' + costText(nodeCost(node))) + '</div>'
+    + '<div class="d-line">效果:' + node.effect + '</div>'
+    + '<div class="d-line">' + node.desc + '</div>'
     + '<div class="d-line" id="tech-action"></div>';
   const btn = document.createElement('button');
   btn.className = 'unlock-btn';
-  btn.textContent = st === 'done' ? '[ 已解锁 ]' : '[ 解锁 ]';
-  btn.disabled = !(st === 'ready' && techAffordable(t));
-  btn.onclick = function () { tryUnlock(t); };
+  btn.textContent = done ? '[ 已解锁 ]' : (node.kind === 'tech' ? '[ 解锁 ]' : '[ 建造 ]');
+  btn.disabled = !(node.status === 'ready' && nodeAffordable(node));
+  btn.onclick = function () { tryNodeAction(node); };
   document.getElementById('tech-action').appendChild(btn);
 }
 
@@ -572,16 +729,16 @@ function renderTech() {
     d.textContent = D.techView.empty;
     techListEl.appendChild(d);
   }
-  list.forEach(function (t, i) {
-    const st = techStatusOf(t);
+  list.forEach(function (node, i) {
     const row = document.createElement('div');
-    row.className = 'tech-item st-' + st + (i === techSel ? ' active' : '');
+    row.className = 'tech-item st-' + node.status + (i === techSel ? ' active' : '');
     row.innerHTML =
-        '<span class="t-name">' + t.name + '</span>'
-      + '<span class="t-cat">' + t.cat + '</span>'
-      + '<span class="t-status">' + D.techView.statusLabels[st] + '</span>'
-      + '<span class="t-cost">' + techCostOf(t) + '</span>'
-      + '<span class="t-effect">' + t.effect + '</span>';
+        '<span class="t-name">' + node.name + (node.count ? ' ×' + node.count : '') + '</span>'
+      + '<span class="t-cat">' + node.cat + '</span>'
+      + '<span class="t-status">' + statusLabelOf(node) + '</span>'
+      + '<span class="t-cost' + (node.status === 'done' ? '' : (overCapText(node) ? ' over' : '')) + '">'
+      + (node.status === 'done' ? '—' : costText(nodeCost(node))) + '</span>'
+      + '<span class="t-effect">' + node.effect + '</span>';
     row.onmousedown = function (e) {
       e.preventDefault();
       techSel = i;
@@ -593,12 +750,17 @@ function renderTech() {
   renderTechDetail();
 }
 
-function tryUnlock(t) {
-  const st = techStatusOf(t);
-  if (st === 'done') { techHint(t.name + ' 已经解锁了。'); return; }
-  if (st === 'wip')  { techHint(D.techView.reasons.wip); return; }
-  if (st === 'locked') {
-    const miss = t.requires.filter(function (r) { return game.unlocked.indexOf(r) < 0; })
+// 节点动作:科技 = 解锁;建筑 / 模块 = 建造一个
+function tryNodeAction(node) {
+  if (node.kind === 'tech') return tryUnlockTech(node);
+  return tryBuild(node);
+}
+
+function tryUnlockTech(node) {
+  if (node.status === 'done') { techHint(node.name + ' 已经解锁了。'); return; }
+  if (node.status === 'wip')  { techHint(D.techView.reasons.wip); return; }
+  if (node.status === 'locked') {
+    const miss = node.requires.filter(function (r) { return !has(r); })
       .map(function (r) {
         const x = D.techs.find(function (y) { return y.id === r; });
         return x ? x.name : r;
@@ -606,23 +768,80 @@ function tryUnlock(t) {
     techHint(D.techView.reasons.locked + miss.join("、"));
     return;
   }
-  if (!techAffordable(t)) { techHint(techCostOf(t) + " —— " + D.techView.reasons.poor); return; }
+  if (overCapText(node)) {
+    techHint('仓库装不下:需要 ' + fmtNum(node.cost.material) + ' 材料,当前上限只有 '
+      + fmtNum(matCap()) + " —— 先在科技树里扩建「仓库」。");
+    return;
+  }
+  if (!nodeAffordable(node)) { techHint(costText(node.cost) + " —— " + D.techView.reasons.poor); return; }
 
-  game.material -= (t.cost.material || 0);
-  game.unlocked.push(t.id);
-  techHint('已解锁:' + t.name + '。');
-  log('> /research ' + t.name, { cls: 'cmd', instant: true, important: true });
-  log('  已解锁:' + t.name + '(' + t.effect + ')', { cls: 'ok', important: true });
+  payCost(node.cost);
+  game.unlocked.push(node.id);
+  techHint('已解锁:' + node.name + '。');
+  log('> /research ' + node.name, { cls: 'cmd', instant: true, important: true });
+  log('  已解锁:' + node.name + '(' + node.effect + ')', { cls: 'ok', important: true });
   noteAction();
   checkAchievements();
-  // 解锁后列表要重排(可解锁 → 已解锁):把选中项钉在刚解锁的那个节点上,
-  // 否则光标会跳到别的节点上,玩家按第二次回车就买错东西了。
-  const after = visibleTechs();
-  const keep = after.findIndex(function (x) { return x.id === t.id; });
-  if (keep >= 0) techSel = keep;
-  buildCommands();   // 解锁后可能要出现新的点击按钮
+  keepSelectionOn(node.id);   // 解锁后列表会重排:把选中项钉在刚解锁的节点上
+  buildCommands();            // 解锁后可能要出现新的点击按钮
   renderTech();
   render();
+}
+
+function tryBuild(node) {
+  if (node.status === 'locked') {
+    const t = D.techs.find(function (y) { return y.id === node.unlockedBy; });
+    techHint('需要先解锁:研究「' + (t ? t.name : node.unlockedBy) + '」');
+    return;
+  }
+  if (node.status === 'noslot') {
+    techHint('算力槽已满(' + slotsUsed() + ' / ' + slotsTotal() + '):先造「计算核心」,或拆掉别的模块。');
+    return;
+  }
+  // 计算核心要先把电准备好(能量当门槛 —— D4)
+  if (node.id === 'core') {
+    const after = energyGross() - (bCount('core') + 1) * D.numbers.coreDrain * effects().drainMul;
+    if (after < 0) {
+      techHint('能量不足:先建反应堆(现在 ' + bCount('reactor') + ' 座,净 '
+        + (energyGross() - energyNeed()).toFixed(1) + '/s;再加一个核心需要 '
+        + (D.numbers.coreDrain * effects().drainMul).toFixed(1) + '/s)。');
+      return;
+    }
+  }
+  const cost = costOf(node);
+  if (overCapText(node)) {
+    techHint('仓库装不下:需要 ' + fmtNum(cost.material) + ' 材料,当前上限只有 '
+      + fmtNum(matCap()) + " —— 先扩建「仓库」。");
+    return;
+  }
+  if ((cost.material || 0) > game.material) {
+    techHint(costText(cost) + " —— " + D.techView.reasons.poor);
+    return;
+  }
+
+  payCost(cost);
+  const bag = node.kind === 'building' ? game.buildings : game.modules;
+  bag[node.id] = (bag[node.id] || 0) + 1;
+  const word = node.kind === 'building' ? '建造' : '安装';
+  techHint('已' + word + ':' + node.name + ' ×' + bag[node.id] + '。');
+  log('> /research ' + word + ' ' + node.name + ' ×' + bag[node.id], { cls: 'cmd', instant: true });
+  noteAction();
+  checkAchievements();
+  keepSelectionOn(node.id);
+  renderTech();
+  render();
+}
+
+function payCost(cost) {
+  game.material -= (cost.material || 0);
+  game.data     -= (cost.data || 0);
+}
+
+// 列表会重排,把选中项钉在刚操作的节点上(否则连按回车会买到别的东西)
+function keepSelectionOn(id) {
+  const after = visibleTechs();
+  const keep = after.findIndex(function (x) { return x.id === id; });
+  if (keep >= 0) techSel = keep;
 }
 
 function openTech() {
@@ -655,7 +874,7 @@ techListEl.addEventListener('keydown', function (e) {
     renderTech();
   } else if (e.key === 'Enter') {
     e.preventDefault();
-    if (list[techSel]) tryUnlock(list[techSel]);
+    if (list[techSel]) tryNodeAction(list[techSel]);
   } else if (e.key === 'PageDown' || e.key === 'PageUp') {
     e.preventDefault();
     techSel = Math.max(0, Math.min(list.length - 1, techSel + (e.key === 'PageDown' ? 8 : -8)));
@@ -766,7 +985,12 @@ function snapshot() {
     savedAt: Date.now(),
     active: running,
     material: game.material,
+    energy:   game.energy,
+    data:     game.data,
     probes:   game.probes,
+    scan:     game.scan,
+    buildings: game.buildings,
+    modules:   game.modules,
     timeSec:  game.timeSec,
     commandsRun: game.commandsRun,
     fired:    game.fired,
@@ -804,7 +1028,12 @@ function stopAutoSave() {
 function applySave(d) {
   bootDone = true;   // 读档时不存在启动序列,引导提示与剧情条件直接可用
   game.material = Number(d.material) || 0;
+  game.energy   = Number(d.energy)   || 0;
+  game.data     = Number(d.data)     || 0;
   game.probes   = Number(d.probes)   || 1;
+  game.scan     = Number(d.scan)     || 0;
+  game.buildings = (d.buildings && typeof d.buildings === 'object') ? d.buildings : {};
+  game.modules   = (d.modules   && typeof d.modules   === 'object') ? d.modules   : {};
   game.timeSec  = Number(d.timeSec)  || 0;
   game.commandsRun = Number(d.commandsRun) || 0;
   game.unlocked = Array.isArray(d.unlocked) ? d.unlocked : [];
@@ -863,8 +1092,15 @@ function boot() {
 
 function resetGame() {
   game.material = 0;
+  game.energy   = 0;
+  game.data     = 0;
   game.probes   = 1;
+  game.scan     = 0;
+  game.buildings = {};
+  game.modules   = {};
   game.timeSec  = 0;
+  energyScale = 1;
+  repTimer = 0;
   game.commandsRun = 0;
   game.fired    = [];
   game.unlocked = [];
