@@ -316,7 +316,7 @@ body::after {
 
 .tech-item { display: flex; gap: 10px; padding: 3px 8px; cursor: pointer; white-space: nowrap; }
 .tech-item.active { background: rgba(142, 255, 168, .14); }
-.tech-item .t-name   { width: 9em; }
+.tech-item .t-name   { width: 12em; }   /* 要放得下 "解析器 ×2（运行 1）" 这种 */
 .tech-item .t-cat    { width: 4em; color: var(--dim); }
 .tech-item .t-status { width: 4em; }
 .tech-item .t-cost   { width: 9em; color: var(--accent); }
