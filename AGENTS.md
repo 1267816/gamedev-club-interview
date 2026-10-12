@@ -24,13 +24,18 @@ src/js/game-data.js   数据表:文字 / 数值 / 命令 / 设置项
 src/js/game.js        逻辑:状态 / 推进 / 渲染 / 命令 / 存档 / 界面
 assets/audio/         音频素材(尚未使用)
 assets/images/        图片素材(尚未使用)
-tools/                开发工具(不参与游戏运行):economy-sim.js 数值与节奏模拟器
+tools/                开发工具(不参与游戏运行)
+  economy-sim.js        数值与节奏模拟器 —— docs 里所有节奏结论都来自它
+  check-parity.js       校验"游戏数值"与"模拟器数值"是否一致(改数值后必跑)
+  checks/               自动化自测:jsdom 7 套 + 无头 Chrome 3 套(见该目录 README)
 docs/plan.md          需求与每轮迭代记录(按时序正序)
 docs/test_datalog.md  测试点与测试结果(按时序正序)
 docs/research.md      研究记录(按时序正序)
 docs/STATE.md         当前进度(给新会话读的「记忆」)
+docs/story-text.md    剧情文本表(人类残片由用户写,AI 只负责抄进数据表)
 AGENTS.md             本文件(留在根目录:AI 工具约定会在这里找它)
 README.md             给面试官看的说明
+.gitignore            排除 node_modules / 截图 / 编辑器文件
 ```
 
 ## 工作方式(重要)
@@ -39,6 +44,7 @@ README.md             给面试官看的说明
 - 任何结构性改动之前,先 `git commit` 存档(checkpoint),坏了才能回滚。
 - 每次改动后更新 `STATE.md`(状态变量、公式、未完成项)。
 - 每次要 AI 改动时,请一并说明:改了哪些文件、可能影响哪些已有功能、怎么自测。
+- **交付前先跑自测**:`node tools/check-parity.js` + `node tools/checks/run-all.js`(见 `tools/checks/README.md`)。
 
 ## 提交信息格式
 

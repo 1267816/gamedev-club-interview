@@ -1,13 +1,7 @@
-# 系统文件
-Thumbs.db
-Desktop.ini
-.DS_Store
+# 开发自测脚本的依赖(游戏本身不需要任何依赖)
+tools/checks/node_modules/
+tools/checks/package-lock.json
 
-# 编辑器
-.vscode/
-.idea/
-
-# 构建产物(本项目为纯静态,通常没有,预留)
-*.exe
-*.o
-node_modules/
+# 编辑器 / 截图产物
+*.code-workspace
+*.png
