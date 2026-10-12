@@ -196,6 +196,31 @@ function run() {
       ok('回到选择时刻:结局清空、选项按钮回来', peek('game.ending') === null && !!btn('btn-stay'));
       ok('回到选择时刻:经济账恢复', peek('game.unlocked').indexOf('comm') >= 0 && peek('game.scan') >= 74);
       ok('成就不会被收回(方便凑全成就)', peek('game.achievements').indexOf('gravekeeper') >= 0);
+
+      // V0.2.0:回档时"正在研究的项目"也要跟着回去 ——
+      // 不然它会把立项时刻留在未来,变成一项永远研究不完的项目(见 docs/research.md 第 28.9 节)
+      console.log('\n【F2. 回档 + 正在研究(V0.2.0 新增)】');
+      peek('game.ending = null; game.choiceSnapshot = null;'
+        + 'game.unlocked = game.unlocked.filter(function(x){return x !== "probe_eff";});'
+        + 'game.data = 999; game.material = 9999;'
+        + 'game.research = { id: "probe_eff", startSec: game.timeSec - 30 };');   // 研究 60 秒,已经走了 30 秒
+      await sleep(200);
+      ok('回档前:研究进度约 50%', Math.abs(peek('researchProgress()') - 0.5) < 0.15, peek('researchProgress()').toFixed(2));
+      peek('game.choiceSnapshot = choiceSnapshotState(); game.timeSec += 300;');   // 模拟"又过了一段才选结局"
+      await sleep(200);
+      peek('backToChoice()');
+      await sleep(200);
+      ok('回档后研究还在,而且指向的是过去(不是未来)',
+        peek('game.research && game.research.id') === 'probe_eff'
+        && peek('game.research.startSec') <= peek('game.timeSec'), JSON.stringify(peek('game.research')));
+      ok('回档后研究进度没有被重置(仍是约 50%)',
+        Math.abs(peek('researchProgress()') - 0.5) < 0.15, peek('researchProgress()').toFixed(2));
+      const beforeAuto = peek('game.unlocked').indexOf('probe_eff');
+      peek('debugAdvanceResearch(9999)');   // 直接推完,不等真实时间(和 jsdom-03/04 用的办法一样)
+      await sleep(150);
+      ok('回档后研究能正常完成(不会卡死)', beforeAuto < 0 && peek('game.unlocked').indexOf('probe_eff') >= 0,
+        JSON.stringify(peek('game.unlocked')));
+
       type('cmd-input', '/go');
       await sleep(300);
       ok('回到选择时刻后仍缺星际航行 → /go 还是被拦',

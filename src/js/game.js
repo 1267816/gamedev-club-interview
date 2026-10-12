@@ -1335,6 +1335,9 @@ function choiceSnapshotState() {
     modules:   JSON.parse(JSON.stringify(game.modules)),
     off:       JSON.parse(JSON.stringify(game.off || {})),
     unlocked:  game.unlocked.slice(),
+    // V0.2.0:正在研究的项目也要记下来 —— 不然"回到选择时刻"会把研究留在未来
+    // (时间戳指向回档之后才发生的时刻 → 那一项永远研究不完),见 docs/research.md 第 28.9 节
+    research:  game.research ? { id: game.research.id, progress: researchElapsed() } : null,
   };
 }
 
@@ -1347,6 +1350,10 @@ function backToChoice() {
   game.modules   = JSON.parse(JSON.stringify(s.modules));
   game.off       = JSON.parse(JSON.stringify(s.off));
   game.unlocked  = s.unlocked.slice();
+  // 研究:把"立项时刻"按回档后的时间重算,这样进度百分比不变、也不会指向未来
+  game.research = s.research
+    ? { id: s.research.id, startSec: game.timeSec - (s.research.progress || 0) }
+    : null;
   game.ending = null;
   game.choiceSnapshot = null;
   writeSave(snapshot());
