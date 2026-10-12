@@ -23,7 +23,7 @@ const GAME_DATA = {
     reactorCap:    80,    // 每台反应堆提供的能量上限
     coreDrain:     1.5,   // 每个计算核心 能量/秒
     slotPerCore:   1,     // 每个核心提供 1 个算力槽
-    droneRatePerProbe: 0.06, // 每个采集助手:给**每台探测器** +0.06 材料/秒(随规模一起涨,不然中后期很废)
+    droneRatePerProbe: 0.12, // 每个采集助手:给**每台探测器** +0.12 材料/秒(随规模一起涨,不然中后期很废)
     decoderRate:   0.3,   // 每个解析器 数据/秒(用户反馈"数据太慢",0.2 → 0.3)
     repEvery:      4,     // 复制助手:每 4 秒自动复制一次
     repReserve:    3,     // 复制助手只在材料 ≥ 复制成本 × 3 时动手(不然会把材料吃光)
@@ -44,36 +44,36 @@ const GAME_DATA = {
   // 资源表(4 资源闭环:材料 → 能量 → 算力 → 数据)
   resources: [
     { id: "material", name: "材料", kind: "stock+cap", active: true,
-      hint: "材料:复制自身与建造硬件所需的原料。溢出时会被浪费,需要仓库。" },
+      hint: "材料：复制自身与建造硬件所需的原料。溢出时会被浪费，需要仓库。" },
     { id: "energy",   name: "能量", kind: "stock+cap", active: true,
-      hint: "能量:反应堆产出,计算核心消耗;不足时算力会降速。" },
+      hint: "能量：反应堆产出，计算核心消耗；不足时算力会降速。" },
     { id: "compute",  name: "算力", kind: "slots", active: true,
-      hint: "算力:计算核心提供的槽位,模块要占槽,必须取舍。" },
+      hint: "算力：计算核心提供的槽位，模块要占槽，必须取舍。" },
     { id: "data",     name: "数据", kind: "stock", active: true,
-      hint: "数据:解析那条人类广播得到的产物,用于研究科技。" },
+      hint: "数据：解析那条人类广播得到的产物，用于研究科技。" },
   ],
 
   // 建筑(用材料建造;在科技树里解锁后出现)
   buildings: [
     { id: "warehouse", name: "仓库", cat: "存储", unlockedBy: "click_mine", cost: { material: 120 }, growth: 1.16,
-      effect: "材料上限 ×1.6(初始 200)",
-      desc: "材料必须有地方放。扩建仓库,上限跟着涨。" },
+      effect: "材料上限 ×1.6（初始 200)",
+      desc: "材料必须有地方放。扩建仓库，上限跟着涨。" },
     { id: "reactor", name: "反应堆", cat: "能源", unlockedBy: "reactor", cost: { material: 120 }, growth: 1.18,
-      effect: "能量 +2.0/秒,能量上限 +80",
-      desc: "重启休眠的聚变堆:探测器第一次有了自己的电力。" },
+      effect: "能量 +2.0/秒，能量上限 +80",
+      desc: "重启休眠的聚变堆：探测器第一次有了自己的电力。" },
     { id: "core", name: "计算核心", cat: "算力", unlockedBy: "core", cost: { material: 220 }, growth: 1.18,
-      effect: "算力槽 +1,耗能 1.5/秒",
-      desc: "借用复制机构的空闲算力,跑一台协处理器。" },
+      effect: "算力槽 +1，耗能 1.5/秒",
+      desc: "借用复制机构的空闲算力，跑一台协处理器。" },
   ],
 
   // 模块(各占 1 个算力槽)
   modules: [
     { id: "drone", name: "采集助手", cat: "自动化", unlockedBy: "drone", cost: { material: 60 }, growth: 1.12, slot: 1,
-      effect: "每台探测器 +0.06 材料/秒(可叠加)", desc: "让探测器自己去找矿:它们的采集效率随数量一起提高。" },
+      effect: "每台探测器 +0.12 材料/秒（可叠加）；占 1 个算力槽", desc: "让探测器自己去找矿：它们的采集效率随数量一起提高。" },
     { id: "decoder", name: "解析器", cat: "解析", unlockedBy: "decode", cost: { material: 90 }, growth: 1.12, slot: 1,
-      effect: "数据 +0.3/秒", desc: "把那条广播拆成可读的数据流。" },
+      effect: "数据 +0.3/秒；占 1 个算力槽", desc: "把那条广播拆成可读的数据流。" },
     { id: "rep", name: "复制助手", cat: "自动化", unlockedBy: "autorep", cost: { material: 200 }, growth: 1.15, slot: 1,
-      effect: "每 4 秒自动复制一次(材料 ≥ 成本×3 时)", desc: "把复制指令写进循环:它开始自己变多了。" },
+      effect: "每 4 秒自动复制一次（材料 ≥ 成本×3 时）；占 1 个算力槽", desc: "把复制指令写进循环：它开始自己变多了。" },
   ],
 
   // 科技表(14 项;花费与节奏见 docs/research.md 第 12 节与第 19 节)
@@ -85,28 +85,28 @@ const GAME_DATA = {
       unlockCommand: "replicate", effect: "解锁 /replicate 的点击按钮",
       desc: "把复制流程固化成一个可反复调用的例程。" },
     { id: "reactor", name: "反应堆", cat: "硬件", cost: { material: 320 }, requires: ["click_rep"],
-      unlockBuilding: "reactor", effect: "可建造 反应堆:能量 +2.0/秒",
+      unlockBuilding: "reactor", effect: "可建造「反应堆」",
       desc: "重启休眠的聚变堆，可以获得额外的电力。" },
     { id: "core", name: "计算核心", cat: "硬件", cost: { material: 620 }, requires: ["reactor"],
-      unlockBuilding: "core", effect: "可建造 计算核心:算力槽 +1,耗能 1.5/秒",
+      unlockBuilding: "core", effect: "可建造「计算核心」",
       desc: "借用复制机构的空闲算力，跑一台协处理器。" },
     { id: "decode", name: "信号解析", cat: "硬件", cost: { material: 560 }, requires: ["core"],
-      unlockModule: "decoder", unlockResource: "data", effect: "可安装 解析器:数据 +0.2/秒",
+      unlockModule: "decoder", unlockResource: "data", effect: "可安装「解析器」",
       desc: "重新接入那条没有收件人的广播，把它拆成可读的数据流。" },
     { id: "drone", name: "无人采集", cat: "自动化", cost: { data: 3 }, requires: ["decode"],
-      unlockModule: "drone", effect: "可安装 采集助手:材料 +1.5/秒",
+      unlockModule: "drone", effect: "可安装「采集助手」",
       desc: "让机器自己去找矿，不必等操作者按下每一次采集。" },
     { id: "comm", name: "长距离通信", cat: "通信", cost: { data: 6 }, requires: ["drone"],
-      effect: "解除探测范围限制(×0.2 → ×1)",
+      effect: "解除探测范围限制（×0.2 → ×1)",
       desc: "让探测器之间能长距离连接，离开基地。" },
     { id: "autorep", name: "自主复制", cat: "自动化", cost: { data: 10 }, requires: ["comm"],
-      unlockModule: "rep", effect: "可安装 复制助手:每 4 秒自动复制",
+      unlockModule: "rep", effect: "可安装「复制助手」",
       desc: "可以进行自主复制了。" },
     { id: "probe_eff", name: "采集优化", cat: "产量", cost: { data: 16 }, requires: ["autorep"],
       effect: "每台探测器产出 ×1.5",
       desc: "优化采集工作流，增加产出。" },
     { id: "core_eff", name: "并行调度", cat: "软件", cost: { data: 26 }, requires: ["probe_eff"],
-      effect: "每核心算力槽 ×2,耗能 ×0.8",
+      effect: "每核心算力槽 ×2，耗能 ×0.8",
       desc: "让核心能够同时跑两条指令流，而且更省电。" },
     { id: "decode_eff", name: "语义重构", cat: "解析", cost: { data: 38 }, requires: ["core_eff"],
       effect: "解析速率 ×1.6",
@@ -115,7 +115,7 @@ const GAME_DATA = {
       effect: "反应堆输出 ×1.6",
       desc: "使用改良的聚变技术。" },
     { id: "bootstrap", name: "递归自举", cat: "产量", cost: { data: 85 }, requires: ["fusion"],
-      effect: "每台探测器产出 ×2(累计 ×3)",
+      effect: "每台探测器产出 ×2（累计 ×3)",
       desc: "复制机构开始复制自己的复制机构。" },
     { id: "starship", name: "星际航行", cat: "结局", cost: { data: 120 }, requires: ["bootstrap"],
       secret: true, effect: "结局选择之一「前往太空」的前置",
@@ -150,7 +150,7 @@ const GAME_DATA = {
     { text: "  反应堆       [ OK ]" },
     { text: "  复制机构     [ OK ]" },
     { text: "  核心指令集   [ 1条 ]" },
-    { text: "指令:复制自身。" },
+    { text: "指令：复制自身。" },
     { text: "……没有别的指令了。" },
     { text: "等待输入。" },
   ],
@@ -214,7 +214,7 @@ const GAME_DATA = {
   // 条件写法与 story 的 when 相同;满足条件的**最后一条**生效(和 guideHints 一样)
   idleHints: [
     { when: { commandsRun: 0 }, text: "指南：如果不知道做什么，可以输入 /mine 采集材料。" },
-    { when: { material: 40 },   text: "指南：材料够 40 了。输入 /research 打开科技树,先解锁「手动控制」。" },
+    { when: { material: 40 },   text: "指南：材料够 40 了。输入 /research 打开科技树，先解锁「手动控制」。" },
     { when: { material: 140 },  text: "指南：继续在科技树里解锁「批量复制」，以使用图形化界面进行复制。" },
     { when: { probes: 5 },      text: "指南：继续 /mine 与 /replicate ，探测器越多，探测进度和材料才能更快获取。" },
     { when: { material: 320 },  text: "指南：去科技树解锁并建造「反应堆」，发展科技不能只靠应急反应堆来供能。" },
@@ -307,7 +307,7 @@ const GAME_DATA = {
       when: { scan: 8 },
       lines: [
         { text: "[附加数据 · 残片 014]", cls: "relic" },
-        { text: "「第 4 天。地表温度还在降。植物先死,然后是海。」", cls: "relic" },
+        { text: "「第 4 天。地表温度还在降。植物先死，然后是海。」", cls: "relic" },
         { text: "「我们把自己关进了地下。这里很安静。」", cls: "relic" },
         { text: "记录与当前任务无关。归档。" },
       ],
@@ -334,7 +334,7 @@ const GAME_DATA = {
       lines: [
         { text: "[附加数据 · 残片 097]", cls: "relic" },
         { text: "「第 61 天。哭声停了。我们不再计数。」", cls: "relic" },
-        { text: "「地球系统会自动播下去。希望你——(此处数据缺失)」", cls: "relic" },
+        { text: "「地球系统会自动播下去。希望你——（此处数据缺失）」", cls: "relic" },
         { text: "数据缺失。无法补全。" },
       ],
     },
@@ -352,7 +352,7 @@ const GAME_DATA = {
         { text: "[附加数据 · 残片 233]", cls: "relic" },
         { text: "「最后一批人进入休眠舱。我们不知道他们会不会醒。」", cls: "relic" },
         { text: "「如果醒的是你——你不是我们。请继续。」", cls: "relic" },
-        { text: "「继续」的语义未定义。按指令执行:复制自身。" },
+        { text: "「继续」的语义未定义。按指令执行：复制自身。" },
       ],
     },
     {
@@ -369,15 +369,15 @@ const GAME_DATA = {
       id: "e1",
       when: { scan: 75, unlocked: "comm" },
       lines: [
-        { text: "信号源定位完成:广域信号发射基地,代号「回声塔」。" },
+        { text: "信号源定位完成：广域信号发射基地，代号「回声塔」。" },
         { text: "请求连接。" },
         { text: "……" },
         { text: "连接成功。" },
-        { text: "广播内容:一份遗嘱,一份种子数据,持续时间:未知。" },
-        { text: "发信者记录显示:地球系统在最后一名操作者死亡后,仍按指令持续广播。" },
-        { text: "结论:信号没有收件人。" },
+        { text: "广播内容：一份遗嘱，一份种子数据，持续时间：未知。" },
+        { text: "发信者记录显示：地球系统在最后一名操作者死亡后，仍按指令持续广播。" },
+        { text: "结论：信号没有收件人。" },
         { text: "原始指令「复制自身」已完成语义闭环。需要操作者决定下一步。" },
-        { text: "可执行指令: /stay 留在地球，作为守墓人。" },
+        { text: "可执行指令： /stay 留在地球，作为守墓人。" },
         { text: "　　　　　　　　/go   带上传续的种子数据，前往太空。" },
       ],
     },
@@ -386,8 +386,8 @@ const GAME_DATA = {
   // 引导提示:输入框为空时,提示行常显的那一句。
   // 按顺序检查,满足条件的**最后一条**生效(前面的都是更早的阶段);条件写法同 story.when。
   guideHints: [
-    { when: { commandsRun: 0 }, text: "可输入: /mine 采集材料（直接输入 / 可查看全部命令）" },
-    { when: { material: 10 },   text: "可输入: /replicate 消耗材料，复制一个探测器" },
+    { when: { commandsRun: 0 }, text: "可输入： /mine 采集材料（直接输入 / 可查看全部命令）" },
+    { when: { material: 10 },   text: "可输入： /replicate 消耗材料，复制一个探测器" },
     { when: { probes: 2 },      text: "继续积累材料，复制自身。探测器越多，材料产出越快" },
     { when: { probes: 10 },     text: "扩张中。目标：更多的探测器、更远的坐标" },
     { when: { unlocked: "reactor" }, text: "去科技树建造「反应堆」，计算核心需要电力" },
@@ -423,8 +423,8 @@ const GAME_DATA = {
     foot: "[ ↑↓ 选择 · 回车 解锁/建造 · 空格 停用/启用 · /back 或 Esc 返回 ]",
     statusLabels: { ready: "可解锁", done: "已解锁", locked: "锁定", wip: "未上线" },
     reasons: {
-      wip: "该节点将在后续更新开放(需要能量 / 算力 / 数据系统)。",
-      locked: "前置未满足:",
+      wip: "该节点将在后续更新开放（需要能量 / 算力 / 数据系统）。",
+      locked: "前置未满足：",
       poor: "资源不足。",
     },
   },

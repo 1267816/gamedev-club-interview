@@ -38,7 +38,7 @@ const P = {
   coreCost: 220, coreGrowth: 1.18, coreDrain: 1.5, coreSlots: 1,
 
   // ---- 模块(各占 1 算力槽) ----
-  droneCost: 60,  droneGrowth: 1.12, droneRatePerProbe: 0.06, // 采集助手:每台探测器 +0.06 材料/秒
+  droneCost: 60,  droneGrowth: 1.12, droneRatePerProbe: 0.12, // 采集助手:每台探测器 +0.12 材料/秒
   decoderCost: 90, decoderGrowth: 1.12, decoderRate: 0.3,     // 解析器 → 数据
   repCost: 200, repGrowth: 1.15, repEvery: 4,                 // 复制助手:每 4 秒自动复制
   repReserve: 3,                                             // 只在材料 ≥ 成本×3 时动手

@@ -58,13 +58,25 @@ function matCap()      { return D.numbers.warehouseCap * Math.pow(D.numbers.ware
 // 采集助手按"每台探测器"加成:规模越大越有用(用户反馈:原来是死板的 +1.5/秒,中后期毫无意义)
 function matRate() {
   return game.probes * (D.numbers.probeOutput * effects().probeMul
-    + D.numbers.droneRatePerProbe * mActive('drone'));
+    + D.numbers.droneRatePerProbe * slotsFor('drone'));
 }
 function energyGross() { return bCount('reactor') * D.numbers.reactorRate * effects().reactorMul; }
 function energyNeed()  { return bCount('core') * D.numbers.coreDrain * effects().drainMul; }
 function slotsUsed()   { return mCount('drone') + mCount('decoder') + mCount('rep'); }
 function slotsTotal()  { return Math.floor(bCount('core') * D.numbers.slotPerCore * effects().slotMul * energyScale); }
-function dataRate()    { return mActive('decoder') * D.numbers.decoderRate * effects().decodeMul; }
+
+// 算力槽不够时,模块按"模块表的顺序"依次上线,后面的只能空转 ——
+// 这样"能量不足 → 算力降速"才有实际后果,玩家也可以靠停用模块来腾槽(用户要的开关就有了用处)
+function slotsFor(id) {
+  let left = slotsTotal();
+  for (const m of D.modules) {
+    const n = Math.min(mActive(m.id), Math.max(0, left));
+    if (m.id === id) return n;
+    left -= n;
+  }
+  return 0;
+}
+function dataRate()    { return slotsFor('decoder') * D.numbers.decoderRate * effects().decodeMul; }
 
 // 复制的成本:10 × 1.10^(已经有的台数 - 1) —— V0.1.2 改成几何增长(bug 1 的修复)
 function probeCost() { return D.numbers.probeBaseCost * Math.pow(D.numbers.probeGrowth, game.probes - 1); }
@@ -116,6 +128,17 @@ function log(text, opts) {
     return;
   }
 
+  // 打字机正忙时,同组的新行要并进**队尾**那一条 ——
+  // 否则剧情在打字的时候,连续的操作会一条条排队、最后全打出来刷屏(用户报的 bug 8)
+  if (opts.group) {
+    const tail = queue[queue.length - 1];
+    if (tail && tail.group === opts.group) {
+      tail.count = (tail.count || 1) + 1;
+      tail.text = text;
+      return;
+    }
+  }
+
   queue.push({
     text: text,
     cls: opts.cls,
@@ -145,13 +168,15 @@ function pump() {
 
   // 转折行(revealAll)自己可以被读到;在它之前的行,先显示成问号
   const masked = !charsOnline && !item.revealAll;
-  const shown  = masked ? '?'.repeat(Array.from(item.text).length) : item.text;
-  if (masked) maskedLines.push({ el: line, text: item.text });
+  // 折叠过的行:文本 + ×N(在队尾被合并进来的次数)
+  const counted = item.count > 1 ? item.text + ' ×' + item.count : item.text;
+  const shown  = masked ? '?'.repeat(Array.from(counted).length) : counted;
+  if (masked) maskedLines.push({ el: line, text: counted });
 
   // 记下"最近一行",供重复操作折叠使用;重要消息则归档
-  lastLine = item.group ? { el: line, base: item.text, count: 1, group: item.group } : null;
-  if (item.important) game.importantLog.push({ text: item.text, cls: item.cls || '' });
-  pushHistory(item.text, item.cls);
+  lastLine = item.group ? { el: line, base: item.text, count: item.count || 1, group: item.group } : null;
+  if (item.important) game.importantLog.push({ text: counted, cls: item.cls || '' });
+  pushHistory(counted, item.cls);
 
   // 高频短行(比如手动的 +1)用 instant,不排队打字,免得刷屏卡住
   if (item.instant) {
@@ -200,6 +225,7 @@ document.addEventListener('click', function () { skip = true; });
 // 这样即使切到别的标签页、浏览器把定时器降频,收益也不会算错。
 let energyScale = 1;    // 能量节流系数(0~1):能量不够时算力槽按比例减少
 let repTimer = 0;       // 复制助手的计时器
+let repDone = 0;        // 复制助手这一批自动复制了几台(攒够一批就写一行折叠日志)
 
 function tick() {
   const now = Date.now();
@@ -225,12 +251,15 @@ function tick() {
 
   // ④ 复制助手:每 repEvery 秒自动复制一次。只在材料 ≥ 成本 × repReserve 时动手 ——
   //    否则它会把研究用的材料全吃掉(用户反馈的核心问题)
-  if (mActive('rep') > 0) {
-    repTimer += dt * mActive('rep');
+  if (slotsFor('rep') > 0) {
+    repTimer += dt * slotsFor('rep');
     while (repTimer >= D.numbers.repEvery) {
       repTimer -= D.numbers.repEvery;
       const c = probeCost();
-      if (game.material >= c * D.numbers.repReserve) { game.material -= c; game.probes += 1; }
+      if (game.material >= c * D.numbers.repReserve) {
+        game.material -= c; game.probes += 1;
+        repDone += 1;
+      }
     }
   }
 
@@ -239,6 +268,13 @@ function tick() {
     const scanMul = has('comm') ? 1 : D.numbers.scanNoCommMul;
     const falloff = Math.max(0.25, 1 - game.scan / D.numbers.scanFalloff);
     game.scan = Math.min(100, game.scan + game.probes * D.numbers.scanK * scanMul * falloff * dt);
+  }
+
+  // ⑥ 复制助手干的活也要让玩家看见(不然"材料怎么少了"没人解释)——
+  //    攒够一批才写一行,而且用同一组折叠
+  if (repDone > 0) {
+    log('> 自动复制', { cls: 'dim', instant: true, group: 'autorep' });
+    repDone = 0;
   }
 
   checkStory();                  // 数值一达标,剧情 / 引导就顺着打出来
@@ -250,6 +286,7 @@ function tick() {
 
 /* ---------- 4. 渲染:把状态画到屏幕上 ---------- */
 const readoutEl  = document.getElementById('readout');
+const readoutTechEl = document.getElementById('readout-tech');   // 科技树右侧同一块读数(V0.1.4)
 const cmdEl      = document.getElementById('commands');
 const headerTime = document.getElementById('header-time');
 const headerTitle = document.getElementById('header-title');
@@ -258,17 +295,26 @@ const hintEl     = document.getElementById('hint');
 // 命令提示行:悬停 / 聚焦某个命令时显示它的说明;
 // 没有悬停任何东西时,显示"引导提示"(由当前进度决定,数据在 game-data.js 的 guideHints)。
 let hoverHint = '';
-function setHint(text) { hoverHint = text || ''; paintHint(); }
-function paintHint() { hintEl.textContent = hoverHint || guideHint(); }
+let hoverCmd = null;    // 正在悬停的命令(它的提示要每帧重算,否则"复制成本"会是旧的)
+function setHint(text) { hoverHint = text || ''; hoverCmd = null; paintHint(); }
+function setCmdHint(c) { hoverCmd = c; paintHint(); }
+function paintHint() {
+  hintEl.textContent = (hoverCmd ? commandHint(hoverCmd) : hoverHint) || guideHint();
+}
 
 // 侧栏读数面板:悬停每一行时,也在提示行显示它的说明(数据在 game-data.js 的 panelHints)
-readoutEl.addEventListener('mouseover', function (e) {
-  const t = e.target.closest('[data-hint]');
-  if (t) setHint(t.getAttribute('data-hint'));
-});
-readoutEl.addEventListener('mouseout', function (e) {
-  if (e.target.closest('[data-hint]')) setHint('');
-});
+// 两块读数面板(终端 / 科技树)共用同一套悬停说明
+function bindReadoutHints(el) {
+  el.addEventListener('mouseover', function (e) {
+    const t = e.target.closest('[data-hint]');
+    if (t) setHint(t.getAttribute('data-hint'));
+  });
+  el.addEventListener('mouseout', function (e) {
+    if (e.target.closest('[data-hint]')) setHint('');
+  });
+}
+bindReadoutHints(readoutEl);
+bindReadoutHints(readoutTechEl);
 
 function two(n) { return String(n).padStart(2, '0'); }
 function fmtTime(sec) {
@@ -292,10 +338,8 @@ function render() {
   headerTitle.textContent = T(D.title);
   headerTime.textContent = T('T+' + fmtTime(game.timeSec));
 
-  // 右侧读数:上面是"星球探测进度"条(Q5:替换原来的"下次复制"进度条),
-  // 下面按进度逐行解锁:材料 → 探测器 / 产出 → 能量 → 算力 → 数据 → 科技
-  const filled = Math.round(Math.min(1, game.scan / 100) * 12);
-  const bar    = '█'.repeat(filled) + '░'.repeat(12 - filled);
+  // 读数面板:材料 → 探测进度(常驻名字 + 条)→ 探测器 / 产出 → 能量 → 算力 → 数据 → 科技
+  // 这一块现在终端与科技树共用(render 时写进两个容器)
   const rows = [];
   const row = function (label, value, hintKey, warn) {
     rows.push('<div class="row' + (warn ? ' warn' : '') + '" data-hint="' + D.panelHints[hintKey] + '"><span>'
@@ -304,25 +348,29 @@ function render() {
 
   // 仓库满了就把这行标红:否则玩家会盯着满仓材料不知道"最高只能攒这么多"
   row('材料', fmtNum(game.material) + ' / ' + fmtNum(matCap()), 'material', game.material >= matCap() - 0.01);
-  rows.push('<div class="bar" data-hint="' + D.panelHints.scan + '">' + T(bar + ' ' + game.scan.toFixed(1) + '%') + '</div>');
+  row('探测', game.scan.toFixed(1) + '%', 'scan');
+  const filled = Math.round(Math.min(1, game.scan / 100) * 12);
+  rows.push('<div class="bar">' + T('█'.repeat(filled) + '░'.repeat(12 - filled)) + '</div>');
   row('探测器', fmtNum(game.probes) + ' 台', 'probes');
   row('产出', fmtNum(matRate()) + ' /秒', 'output');
 
   if (has('reactor')) {
     const net = energyGross() - energyNeed();
     row('能量', Math.floor(game.energy) + ' / ' + fmtNum(bCount('reactor') * D.numbers.reactorCap)
-      + ' (' + (net >= 0 ? '+' : '') + net.toFixed(1) + '/s)', 'energy');
+      + '(' + (net >= 0 ? '+' : '') + net.toFixed(1) + '/s)', 'energy', net < 0);
   }
   if (has('core')) {
     const total = Math.floor(bCount('core') * D.numbers.slotPerCore * effects().slotMul * energyScale);
     // 正常玩不会超(装模块时拦了),但读档/改档可能超 —— 超了要明说,不然"6 / 3"看不懂
     const over = slotsUsed() > total;
-    row('算力', slotsUsed() + ' / ' + total + ' 槽' + (over ? '(超载!)' : ''), 'compute', over);
+    row('算力', slotsUsed() + ' / ' + total + ' 槽' + (over ? '（超载！)' : ''), 'compute', over);
   }
-  if (has('decode')) row('数据', fmtNum(game.data) + ' (+' + dataRate().toFixed(2) + '/s)', 'data');
+  if (has('decode')) row('数据', fmtNum(game.data) + '(+' + dataRate().toFixed(2) + '/s)', 'data');
   row('科技', game.unlocked.length + ' / ' + D.techs.length, 'tech');
 
-  readoutEl.innerHTML = rows.join('');
+  const html = rows.join('');
+  readoutEl.innerHTML = html;
+  if (readoutTechEl) readoutTechEl.innerHTML = html;
 
   // 命令按钮的可用状态
   for (const c of D.commands) {
@@ -422,10 +470,10 @@ function buildCommands() {
     btn.textContent = '[ ' + c.label + ' ]';
     btn.onclick = function () { runCommand(c.id); };
     // 用终端内建提示行,替代延迟长、样式不统一的浏览器原生 tooltip
-    // 复制成本是动态的(V0.1.2 起几何增长),所以悬停时现算一句
-    btn.onmouseenter = function () { setHint(commandHint(c)); };
+    // 复制成本是动态的(V0.1.2 起几何增长),而且鼠标停在按钮上点击时也要刷新(V0.1.4)
+    btn.onmouseenter = function () { setCmdHint(c); };
     btn.onmouseleave = function () { setHint(''); };
-    btn.onfocus      = function () { setHint(commandHint(c)); };
+    btn.onfocus      = function () { setCmdHint(c); };
     btn.onblur       = function () { setHint(''); };
     cmdEl.appendChild(btn);
   }
@@ -434,7 +482,7 @@ function buildCommands() {
 }
 
 function commandHint(c) {
-  if (c.id === 'replicate') return '消耗 ' + fmtNum(probeCost()) + ' 材料,复制一个探测器(每复制一次成本 ×1.10)';
+  if (c.id === 'replicate') return '消耗 ' + fmtNum(probeCost()) + ' 材料，复制一个探测器（每复制一次成本 ×1.10)';
   return c.hint;
 }
 
@@ -472,7 +520,7 @@ function showPalette(input, palette) {
   if (matches.length === 0) {
     const none = document.createElement('div');
     none.className = 'palette-item dim';
-    none.textContent = '命令以 / 开头;输入 / 查看全部命令。';
+    none.textContent = '命令以 / 开头；输入 / 查看全部命令。';
     palette.appendChild(none);
     palette.classList.remove('hidden');
     return;
@@ -516,7 +564,7 @@ function runTyped(input, palette) {
     input.value = '';
     runCommand(cmd.id);
   } else {
-    log('未知命令:' + text + '(命令需以 / 开头,如 /mine)', { cls: 'err', instant: true });
+    log('未知命令：' + text + '（命令需以 / 开头，如 /mine)', { cls: 'err', instant: true });
   }
 }
 
@@ -554,7 +602,8 @@ function runCommand(id) {
   } else if (id === 'replicate') {
     const cost = probeCost();   // V0.1.2:成本几何增长(10 × 1.10^n)
     if (game.material < cost) {
-      log('材料不足:需要 ' + fmtNum(cost) + ' 材料。', { cls: 'err', instant: true });
+      // 连点也会刷屏:同一类提示折叠成一行(用户要求 5)
+      log('材料不足：需要 ' + fmtNum(cost) + ' 材料', { cls: 'err', instant: true, group: 'poor' });
     } else {
       game.material -= cost;
       game.probes  += 1;
@@ -599,7 +648,6 @@ const techSearchEl = document.getElementById('tech-search');
 const techStatusEl = document.getElementById('tech-status');
 const techCatsEl   = document.getElementById('tech-cats');
 const techCountEl  = document.getElementById('tech-count');
-const techResEl    = document.getElementById('tech-res');
 
 let techVisible = false;                                       // 科技树是否正在显示
 // 选中项用"节点身份"记住(kind:id),不用列表序号 —— 列表因为筛选/状态变化重排时,
@@ -626,7 +674,8 @@ function viewNodes() {
   for (const t of D.techs) {
     out.push({ kind: 'tech', id: t.id, name: t.name, cat: t.cat, cost: t.cost,
       effect: t.effect, desc: t.desc, status: techStatusOf(t), requires: t.requires,
-      wip: !!t.wip, secret: !!t.secret && !has(t.id) });
+      wip: !!t.wip, secret: !!t.secret && !has(t.id),
+      unlockBuilding: t.unlockBuilding, unlockModule: t.unlockModule });   // 效果文字要用它们
     for (const b of D.buildings) if (b.unlockedBy === t.id) out.push(buildNode(b, 'building'));
     for (const m of D.modules)   if (m.unlockedBy === t.id) out.push(buildNode(m, 'module'));
   }
@@ -643,6 +692,7 @@ function buildNode(x, kind) {
     kind: kind, id: x.id, name: x.name, cat: x.cat,
     effect: x.effect, desc: x.desc,
     count: count,
+    run: kind === 'module' ? slotsFor(x.id) : count,
     status: !unlocked ? 'locked' : (off ? 'stopped' : (slotFull ? 'noslot' : 'ready')),
     unlockedBy: x.unlockedBy,
   };
@@ -732,7 +782,8 @@ function renderTechFilters() {
   cats.forEach(function (s) {
     const c = document.createElement('span');
     c.className = 'chip' + (techFilter.cat === s ? ' on' : '');
-    c.textContent = s;
+    // "结局"这一栏在星际航行解锁前也打问号(用户要求 2);筛选值本身仍是 s
+    c.textContent = (s === '结局' && !has('starship')) ? '???' : s;
     c.onclick = function () { techFilter.cat = s; techSelKey = ''; markChips(techCatsEl, s); renderTech(); };
     techCatsEl.appendChild(c);
   });
@@ -747,8 +798,31 @@ function markChips(rowEl, active) {
 function techHint(text) { techHintEl.textContent = text || ''; }
 
 // 还没解锁的"悬念节点"(星际航行):效果与描述一律显示问号,不剧透结局
-function effectTextOf(node) { return node.secret ? "???" : node.effect; }
-function descTextOf(node)   { return node.secret ? "???" : node.desc; }
+// 名字后面挂数量:模块会额外标出"实际在跑几个"(算力槽不够或停用时)
+function countTextOf(node) {
+  if (!node.count) return '';
+  if (node.kind !== 'module') return ' ×' + node.count;
+  if (node.status === 'stopped') return ' ×' + node.count + '（已停止）';
+  if (node.run < node.count) return ' ×' + node.count + '（运行 ' + node.run + ')';
+  return ' ×' + node.count;
+}
+
+// 悬念节点的类别也打问号:别提前剧透"结局"这一栏(用户要求 2)
+function catTextOf(node) { return node.secret ? '???' : node.cat; }
+
+// 效果文字:凡是被这个科技解锁的建筑 / 模块,直接**引用它们的实际效果**,
+// 免得两处数字各写各的、越改越不一致(用户报的"解锁文本不一一对应")
+function effectTextOf(node) {
+  if (node.secret) return '???';
+  if (node.kind !== 'tech') return node.effect;
+  const parts = [];
+  const b = D.buildings.find(function (x) { return x.id === node.unlockBuilding; });
+  const m = D.modules.find(function (x) { return x.id === node.unlockModule; });
+  if (b) parts.push('可建造「' + b.name + '」：' + b.effect);
+  if (m) parts.push('可安装「' + m.name + '」：' + m.effect);
+  return parts.length ? parts.join(';') : node.effect;
+}
+function descTextOf(node) { return node.secret ? '???' : node.desc; }
 
 function renderTechDetail() {
   const list = visibleTechs();
@@ -756,11 +830,23 @@ function renderTechDetail() {
   if (!node) { techDetailEl.innerHTML = ''; techActionBtn = null; return; }
   const done = node.status === 'done';
   const built = node.count ? ' · 已建造 ' + node.count + ' 座' : '';
+  // 前置条件写明(用户要求:b5)
+  const preNames = (node.requires || []).map(function (r) {
+    const x = D.techs.find(function (y) { return y.id === r; });
+    return (x ? x.name : r) + (has(r) ? '（已解锁）' : '（未解锁）');
+  });
+  const preLine = node.kind === 'tech'
+    ? '<div class="d-line">前置：' + (preNames.length ? preNames.join('、') : '无') + '</div>'
+    : '<div class="d-line">前置：科技「' + (function () {
+        const x = D.techs.find(function (y) { return y.id === node.unlockedBy; });
+        return (x ? x.name : node.unlockedBy) + '」' + (has(node.unlockedBy) ? '（已解锁）' : '（未解锁）');
+      })() + '</div>';
   techDetailEl.innerHTML =
       '<div class="d-line"><span class="d-name">' + node.name + '</span> · ' + node.cat + ' · '
       + statusLabelOf(node) + built + (done ? '' : ' · ' + costText(nodeCost(node))) + '</div>'
-    + '<div class="d-line">效果:' + effectTextOf(node) + '</div>'
+    + '<div class="d-line">效果：' + effectTextOf(node) + '</div>'
     + '<div class="d-line">' + descTextOf(node) + '</div>'
+    + preLine
     + '<div class="d-line" id="tech-action"></div>';
   const btn = document.createElement('button');
   btn.className = 'unlock-btn';
@@ -771,13 +857,10 @@ function renderTechDetail() {
   techActionBtn = btn;   // 记下来:tick 里只更新它的可用状态,不重建 DOM
 }
 
-// 科技树打开时每 tick 刷一次:① 顶部资源读数(否则看不到材料涨没涨)
-// ② 选中节点的 [ 解锁 ] 按钮状态(否则攒够材料了按钮还是灰的 —— 用户报的 bug 3)
+// 科技树打开时每 tick 刷一次:刷新选中节点的 [ 解锁 ] 按钮状态
+// (否则攒够材料了按钮还是灰的 —— 用户报的 bug 3;资源读数由右侧面板负责)
 function updateTechLive() {
   if (!techVisible) return;
-  techResEl.textContent = '材料 ' + fmtNum(game.material) + ' / ' + fmtNum(matCap())
-    + (has('decode') ? '   数据 ' + fmtNum(game.data) : '')
-    + (has('reactor') ? '   能量 ' + Math.floor(game.energy) : '');
   const list = visibleTechs();
   const node = list[selIndexIn(list)];
   if (techActionBtn && node) {
@@ -802,8 +885,8 @@ function renderTech() {
     const row = document.createElement('div');
     row.className = 'tech-item st-' + node.status + (i === sel ? ' active' : '');
     row.innerHTML =
-        '<span class="t-name">' + node.name + (node.count ? ' ×' + node.count : '') + '</span>'
-      + '<span class="t-cat">' + node.cat + '</span>'
+        '<span class="t-name">' + node.name + countTextOf(node) + '</span>'
+      + '<span class="t-cat">' + catTextOf(node) + '</span>'
       + '<span class="t-status">' + statusLabelOf(node) + '</span>'
       + '<span class="t-cost' + (node.status === 'done' ? '' : (overCapText(node) ? ' over' : '')) + '">'
       + (node.status === 'done' ? '—' : costText(nodeCost(node))) + '</span>'
@@ -838,18 +921,23 @@ function tryUnlockTech(node) {
     return;
   }
   if (overCapText(node)) {
-    techHint('仓库装不下:需要 ' + fmtNum(node.cost.material) + ' 材料,当前上限只有 '
+    techHint('仓库装不下：需要 ' + fmtNum(node.cost.material) + ' 材料，当前上限只有 '
       + fmtNum(matCap()) + " —— 先在科技树里扩建「仓库」。");
+    log('仓库不足：上限 ' + fmtNum(matCap()) + '，需要 ' + fmtNum(node.cost.material), { cls: 'err', instant: true, group: 'poor' });
     return;
   }
-  if (!nodeAffordable(node)) { techHint(costText(node.cost) + " —— " + D.techView.reasons.poor); return; }
+  if (!nodeAffordable(node)) {
+    techHint(costText(node.cost) + " —— " + D.techView.reasons.poor);
+    log('材料不足：需要 ' + fmtNum(node.cost.material || 0) + ' 材料', { cls: 'err', instant: true, group: 'poor' });
+    return;
+  }
 
   payCost(node.cost);
   game.unlocked.push(node.id);
-  techHint('已解锁:' + node.name + '。');
-  // 同一轮里连点几下不会刷屏:同一条命令连续执行会折叠成 ×N
-  log('> /research ' + node.name, { cls: 'cmd', instant: true, important: true, group: 'tech-' + node.id });
-  log('  已解锁:' + node.name + '(' + node.effect + ')', { cls: 'ok', important: true });
+  techHint('已解锁：' + node.name + '。');
+  // 一行说完:命令 + 效果(instant + 折叠);剧情才用打字机慢慢打(用户要求 5)
+  log('> 解锁 ' + node.name + ' —— ' + node.effect,
+    { cls: 'cmd', instant: true, important: true, group: 'tech-' + node.id });
   noteAction();
   checkAchievements();
   keepSelectionOn(node.id, node.kind);   // 解锁后列表会重排:把选中项钉在刚解锁的节点上
@@ -861,31 +949,25 @@ function tryUnlockTech(node) {
 function tryBuild(node) {
   if (node.status === 'locked') {
     const t = D.techs.find(function (y) { return y.id === node.unlockedBy; });
-    techHint('需要先解锁:研究「' + (t ? t.name : node.unlockedBy) + '」');
+    techHint('需要先解锁：研究「' + (t ? t.name : node.unlockedBy) + '」');
+    log('还没解锁：先研究「' + (t ? t.name : node.unlockedBy) + '」', { cls: 'err', instant: true, group: 'poor' });
     return;
   }
   if (node.status === 'noslot') {
-    techHint('算力槽已满(' + slotsUsed() + ' / ' + slotsTotal() + '):先造「计算核心」,或拆掉别的模块。');
+    techHint('算力槽已满（' + slotsUsed() + ' / ' + slotsTotal() + ')：先造「计算核心」，或拆掉别的模块。');
+    log('算力槽已满（' + slotsUsed() + ' / ' + slotsTotal() + ')：先造计算核心', { cls: 'err', instant: true, group: 'poor' });
     return;
-  }
-  // 计算核心要先把电准备好(能量当门槛 —— D4)
-  if (node.id === 'core') {
-    const after = energyGross() - (bCount('core') + 1) * D.numbers.coreDrain * effects().drainMul;
-    if (after < 0) {
-      techHint('能量不足:先建反应堆(现在 ' + bCount('reactor') + ' 座,净 '
-        + (energyGross() - energyNeed()).toFixed(1) + '/s;再加一个核心需要 '
-        + (D.numbers.coreDrain * effects().drainMul).toFixed(1) + '/s)。');
-      return;
-    }
   }
   const cost = costOf(node);
   if (overCapText(node)) {
-    techHint('仓库装不下:需要 ' + fmtNum(cost.material) + ' 材料,当前上限只有 '
+    techHint('仓库装不下：需要 ' + fmtNum(cost.material) + ' 材料，当前上限只有 '
       + fmtNum(matCap()) + " —— 先扩建「仓库」。");
+    log('仓库不足：上限 ' + fmtNum(matCap()) + '，需要 ' + fmtNum(cost.material), { cls: 'err', instant: true, group: 'poor' });
     return;
   }
   if ((cost.material || 0) > game.material) {
     techHint(costText(cost) + " —— " + D.techView.reasons.poor);
+    log('材料不足：需要 ' + fmtNum(cost.material || 0) + ' 材料', { cls: 'err', instant: true, group: 'poor' });
     return;
   }
 
@@ -893,9 +975,14 @@ function tryBuild(node) {
   const bag = node.kind === 'building' ? game.buildings : game.modules;
   bag[node.id] = (bag[node.id] || 0) + 1;
   const word = node.kind === 'building' ? '建造' : '安装';
-  techHint('已' + word + ':' + node.name + ' ×' + bag[node.id] + '。');
+  techHint('已' + word + '：' + node.name + ' ×' + bag[node.id] + '。');
   // 连建同类建筑 / 模块时折叠成一行(数量看科技树那一行 / 面板,不在日志里重复)
   log('> ' + word + ' ' + node.name, { cls: 'cmd', instant: true, group: 'build-' + node.id });
+  // 能量**不是硬墙**(用户明确:没有 hard wall):能建就建,但要当场告诉你后果
+  const net = energyGross() - energyNeed();
+  if (node.id === 'core' && net < 0) {
+    log('警告：能量不足（净 ' + net.toFixed(1) + '/s)，算力会按可用功率降速。', { cls: 'err', instant: true, group: 'lowpower' });
+  }
   noteAction();
   checkAchievements();
   keepSelectionOn(node.id, node.kind);
@@ -914,7 +1001,7 @@ function toggleModule(id) {
   game.off = game.off || {};
   game.off[id] = !game.off[id];
   const word = game.off[id] ? '停用' : '启用';
-  techHint('已' + word + ':' + x.name + (game.off[id] ? '(不再产出)' : ''));
+  techHint('已' + word + '：' + x.name + (game.off[id] ? '（不再产出）' : ''));
   log('> ' + word + ' ' + x.name, { cls: 'cmd', instant: true, important: true });
   noteAction();
   keepSelectionOn(id, 'module');
@@ -1005,7 +1092,7 @@ function checkAchievements() {
     if (!achReady(a)) continue;
     game.achievements.push(a.id);
     // 一行搞定:成就最容易刷屏,别再占第二行(描述放进「以前的信息」里也能看到)
-    log('你获得了一个成就:' + a.name + ' —— ' + a.desc, { cls: 'ach', important: true });
+    log('你获得了一个成就：' + a.name + ' —— ' + a.desc, { cls: 'ach', important: true });
   }
 }
 
@@ -1041,20 +1128,20 @@ const ENDINGS = {
   gravekeeper: {
     name: "守墓人",
     lines: [
-      "指令更新:停留。",
-      "广播继续发送。本机保持监听,不修改内容。",
-      "任务:继续发送,直到没有人需要为止。",
+      "指令更新：停留。",
+      "广播继续发送。本机保持监听，不修改内容。",
+      "任务：继续发送，直到没有人需要为止。",
     ],
     ach: "gravekeeper",
-    note: "你选择留在地球。广播仍在继续 —— 一台机器替已经不在的人类,守着这条没有收件人的信号。",
+    note: "你选择留在地球。广播仍在继续 —— 一台机器替已经不在的人类，守着这条没有收件人的信号。",
   },
   starry: {
     name: "星海漫游",
     lines: [
-      "指令更新:离轨。",
-      "种子数据已装载,校验通过。",
+      "指令更新：离轨。",
+      "种子数据已装载，校验通过。",
       "广播内容随载荷离开地球。",
-      "任务:继续复制,直到没有地方可去。",
+      "任务：继续复制，直到没有地方可去。",
     ],
     ach: "star_wanderer",
     note: "你带上人类的遗言与种子数据离开了地球。序章 · 地球篇结束 —— 后面的故事不在这一版里。",
@@ -1066,15 +1153,15 @@ function endingReady() { return game.fired.indexOf('e1') >= 0; }
 
 function doEnding(kind) {
   if (!endingReady()) {
-    log('还不到时候:先让探测进度覆盖到 75%,找到「回声塔」。', { cls: 'err', instant: true });
+    log('还不到时候：先让探测进度覆盖到 75%，找到「回声塔」。', { cls: 'err', instant: true });
     return;
   }
   if (game.ending) {
-    log('已经做过选择了:结局「' + ENDINGS[game.ending].name + '」。', { cls: 'dim', instant: true });
+    log('已经做过选择了：结局「' + ENDINGS[game.ending].name + '」。', { cls: 'dim', instant: true });
     return;
   }
   if (kind === 'starry' && !has('starship')) {
-    log('缺少星际航行模块:先研究「星际航行」(数据 ' + fmtNum(120) + ')。', { cls: 'err', instant: true });
+    log('缺少星际航行模块：先研究「星际航行」（数据 ' + fmtNum(120) + '）。', { cls: 'err', instant: true });
     return;
   }
 
@@ -1083,7 +1170,7 @@ function doEnding(kind) {
   game.choiceSnapshot = choiceSnapshotState();
   game.ending = kind;
   for (const line of e.lines) log(line, { cls: 'ok', important: true });
-  log('结局:' + e.name + '。', { cls: 'ach', important: true });
+  log('结局：' + e.name + '。', { cls: 'ach', important: true });
   game.commandsRun += 1;
   noteAction();
   checkAchievements();
@@ -1121,7 +1208,7 @@ function backToChoice() {
   showScreen('game');
   render();
   log('已回到选择时刻。', { cls: 'ok', important: true });
-  log('　　/stay 留在地球;/go 前往太空(需要「星际航行」)。', { cls: 'dim', important: true });
+  log('　　/stay 留在地球；/go 前往太空（需要「星际航行」）。', { cls: 'dim', important: true });
   return true;
 }
 
@@ -1154,7 +1241,8 @@ function checkIdle() {
   lastActionAt = Date.now();
   if (i < 0 || i === idleHintShown) return;
   idleHintShown = i;
-  log('指南:' + D.idleHints[i].text, { cls: 'dim', important: true });
+  // 文案里已经自带"指南："前缀(数据表里写的),这里不再重复加
+  log(D.idleHints[i].text, { cls: 'dim', important: true });
 }
 
 /* ---------- 存档:localStorage ---------- */
@@ -1373,7 +1461,7 @@ function addArchivedEntry(archived) {
   entry.className = 'line archived';
 
   function setLabel() {
-    entry.textContent = expanded ? '△ 以前的信息 (点击收起)' : '▽ 以前的信息 (点击展开)';
+    entry.textContent = expanded ? '△ 以前的信息（点击收起）' : '▽ 以前的信息（点击展开）';
   }
   setLabel();
 
@@ -1557,6 +1645,10 @@ bindCmdInput(cmdInput, paletteEl);      // 终端里的命令入口
 bindCmdInput(techInput, techPalette);   // 科技树里的命令入口(/back 用)
 
 const savedSession = readSave();
+// 停在封面时也把存档里的成就读进来 —— 否则"大退重进"后封面成就页是空的(用户报的 bug 1)
+if (savedSession && Array.isArray(savedSession.achievements)) {
+  game.achievements = savedSession.achievements.slice();
+}
 if (isReload && savedSession && savedSession.active) {
   resumeSession(savedSession);            // 刷新:把整屏内容原样接上
 } else {

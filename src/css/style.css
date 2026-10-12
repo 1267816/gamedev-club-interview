@@ -258,7 +258,27 @@ body::after {
   padding: 16px 20px;
   display: grid;
   gap: 10px;
+  grid-template-columns: 1fr 240px;
   grid-template-rows: auto auto 1fr auto auto;
+  grid-template-areas:
+    "thead  tside"
+    "tfilter tside"
+    "tlist  tside"
+    "tdetail tside"
+    "tfoot  tside";
+}
+
+#tech-header  { grid-area: thead; }
+#tech-filters { grid-area: tfilter; }
+#tech-list    { grid-area: tlist; }
+#tech-detail  { grid-area: tdetail; }
+#tech-foot    { grid-area: tfoot; }
+#side-tech {
+  grid-area: tside;
+  border-left: 1px solid var(--line);
+  padding-left: 14px;
+  font-size: 14px;
+  overflow-y: auto;
 }
 
 #tech-header {

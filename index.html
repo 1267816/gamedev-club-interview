@@ -99,10 +99,10 @@
   </div>
 
   <!-- 科技树:整屏替换终端(/research 打开、/back 或 Esc 返回) -->
+  <!-- 科技树:整屏替换终端(右侧复用终端那块读数面板) -->
   <div id="tech" class="hidden">
     <header id="tech-header">
       <span id="tech-title">科技树</span>
-      <span id="tech-res"></span>
       <span id="tech-count">已解锁 0 / 0</span>
     </header>
     <div id="tech-filters">
@@ -117,6 +117,9 @@
       <div id="tech-ps1"><span>&gt;</span><input id="tech-input" type="text" autocomplete="off" spellcheck="false"></div>
       <div id="tech-palette" class="hidden"></div>
     </footer>
+    <aside id="side-tech">
+      <div id="readout-tech"></div>
+    </aside>
   </div>
 
   <script src="src/js/game-data.js"></script>
