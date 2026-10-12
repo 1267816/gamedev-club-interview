@@ -615,6 +615,11 @@ function tryUnlock(t) {
   log('  已解锁:' + t.name + '(' + t.effect + ')', { cls: 'ok', important: true });
   noteAction();
   checkAchievements();
+  // 解锁后列表要重排(可解锁 → 已解锁):把选中项钉在刚解锁的那个节点上,
+  // 否则光标会跳到别的节点上,玩家按第二次回车就买错东西了。
+  const after = visibleTechs();
+  const keep = after.findIndex(function (x) { return x.id === t.id; });
+  if (keep >= 0) techSel = keep;
   buildCommands();   // 解锁后可能要出现新的点击按钮
   renderTech();
   render();
