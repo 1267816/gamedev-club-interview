@@ -24,6 +24,7 @@ src/js/game-data.js   数据表:文字 / 数值 / 命令 / 设置项
 src/js/game.js        逻辑:状态 / 推进 / 渲染 / 命令 / 存档 / 界面
 assets/audio/         音频素材(尚未使用)
 assets/images/        图片素材(尚未使用)
+tools/                开发工具(不参与游戏运行):economy-sim.js 数值与节奏模拟器
 docs/plan.md          需求与每轮迭代记录(按时序正序)
 docs/test_datalog.md  测试点与测试结果(按时序正序)
 docs/research.md      研究记录(按时序正序)
