@@ -14,6 +14,9 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 
 const ROOT = path.join(__dirname, '..', '..');
+// 封面版本号要跟 game-data.js 的 version 一致(2026-10-12:不再写死旧版本号)
+const GAME_DATA_SRC = fs.readFileSync(path.join(ROOT, 'src', 'js', 'game-data.js'), 'utf8');
+const GAME_VERSION = (GAME_DATA_SRC.match(/version:\s*"([^"]+)"/) || [])[1] || '';
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -107,7 +110,8 @@ function run() {
 
       await sleep(300);
       console.log('\n【A. bug 1:复制成本不再固定】');
-      ok('封面版本号 V0.1.2', doc.getElementById('cover-version').textContent.indexOf('V0.1.2') >= 0,
+      ok('封面版本号与 game-data.js 一致(' + GAME_VERSION + ')',
+        doc.getElementById('cover-version').textContent.indexOf(GAME_VERSION) >= 0,
         doc.getElementById('cover-version').textContent);
       doc.getElementById('btn-new').click();
       await sleep(9000);
