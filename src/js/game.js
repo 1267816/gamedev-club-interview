@@ -257,7 +257,7 @@ function pump() {
   };
   const step = function () {
     if (skip) i = chars.length;
-    else i += (longPress ? 6 : 1);
+    else { i += (longPress ? 6 : 1); AudioSystem.playSfx('key'); }   // V0.2.5:打字机按键声(内部自己限流)
     line.textContent = chars.slice(0, i).join('');
     logEl.scrollTop = logEl.scrollHeight;
     if (i >= chars.length) {
@@ -1316,6 +1316,7 @@ function checkAchievements() {
     if (!achReady(a)) continue;
     game.achievements.push(a.id);
     writeAccountAchievements();   // 立刻落盘:成就是账号级的,不跟着存档走
+    AudioSystem.playSfx('notify');   // V0.2.5:成就 = 重要信息,给一声提示音
     // 一行搞定:成就最容易刷屏,别再占第二行(描述放进「以前的信息」里也能看到)
     log('你获得了一个成就：' + a.name + ' —— ' + a.desc, { cls: 'ach', important: true });
   }
@@ -1479,6 +1480,7 @@ function showEnding(kind) {
   document.getElementById('end-note').textContent = e.note;
   const back = document.getElementById('btn-end-choice');
   back.disabled = !game.choiceSnapshot;
+  AudioSystem.playSfx('notify');   // V0.2.5:结局 = 最重要的信息,给一声提示音
   showScreen('ending');
 }
 
@@ -1710,6 +1712,7 @@ function startNew() {
   showScreen('game');
   startAutoSave();
   writeSave(snapshot());
+  AudioSystem.playMusic();   // V0.2.5:点 [ 新游戏 ] 就是一次用户手势,这时候起背景音乐
   boot();
 }
 
@@ -1742,6 +1745,7 @@ function resumeSession(d) {
   renderHistory(game.logHistory);
   buildCommands();
   startAutoSave();
+  AudioSystem.playMusic();   // V0.2.5:续玩时也起音乐(读档是一次点击,已经算用户手势)
 }
 
 // 把整段日志历史原样贴回终端
@@ -1824,14 +1828,93 @@ function writeSettings() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(audioSettings));
 }
 
-// 音频接口:现在只记录音量,尚未加载音频素材。
-// 以后接真实音频时,把 TODO 换成操作 <audio> / WebAudio 即可,调用方不用改。
-const AudioSystem = {
-  setMusicVolume: function (v) { audioSettings.music = v; writeSettings(); /* TODO */ },
-  setSfxVolume:   function (v) { audioSettings.sfx   = v; writeSettings(); /* TODO */ },
-  playSfx:  function (name) { /* TODO: 播放音效 name */ },
-  playMusic: function (name) { /* TODO: 播放音乐 name */ },
+/* 音频素材(V0.2.5):三个 wav 都在 assets/audio/ 里,由 tools/audio/make-audio.py 合成
+   —— 所以没有第三方授权问题,离线也能播。调用方(打字机 / 成就 / 开局)只用下面这套接口。 */
+const AUDIO_FILES = {
+  key:    'assets/audio/key.wav',      // 打字机按键声
+  notify: 'assets/audio/notify.wav',   // 重要信息(成就)提示音
+  bgm:    'assets/audio/bgm.wav',      // 背景音乐(20 秒循环)
 };
+
+const AudioSystem = (function () {
+  const KEY_POOL = 4;      // 按键声要能叠着响 → 用一个小池子轮流放
+  const KEY_MIN_GAP = 55;  // 两次按键声之间至少隔 55ms,不然打字太快会糊成一片
+  const els = {};          // notify / bgm 各一个元素
+  let keyPool = [];
+  let keyIdx = 0;
+  let lastKeyAt = 0;
+
+  // jsdom / 老浏览器里可能没有 Audio —— 没有音频也要能正常玩
+  function canPlay() { return typeof window !== 'undefined' && typeof window.Audio === 'function'; }
+
+  function build(name) {
+    if (els[name]) return els[name];
+    if (!canPlay() || !AUDIO_FILES[name]) return null;
+    try {
+      const a = new window.Audio(AUDIO_FILES[name]);
+      a.preload = 'auto';
+      if (name === 'bgm') a.loop = true;
+      a.volume = (name === 'bgm') ? audioSettings.music : audioSettings.sfx;
+      els[name] = a;
+    } catch (e) { els[name] = null; }
+    return els[name];
+  }
+
+  // 自动播放策略:play() 可能被浏览器拒;被拒不算错,等下一次用户手势再试
+  function tryPlay(a) {
+    if (!a) return;
+    try {
+      const p = a.play();
+      if (p && p.catch) p.catch(function () { /* 等用户手势 */ });
+    } catch (e) { /* 忽略 */ }
+  }
+
+  function applyVolumes() {
+    if (els.bgm) els.bgm.volume = audioSettings.music;
+    if (els.notify) els.notify.volume = audioSettings.sfx;
+    keyPool.forEach(function (a) { a.volume = audioSettings.sfx; });
+  }
+
+  function playKey() {
+    if (!(audioSettings.sfx > 0)) return;
+    const now = Date.now();
+    if (now - lastKeyAt < KEY_MIN_GAP) return;
+    lastKeyAt = now;
+    if (!keyPool.length && canPlay()) {
+      for (let i = 0; i < KEY_POOL; i++) {
+        try { const a = new window.Audio(AUDIO_FILES.key); a.volume = audioSettings.sfx; keyPool.push(a); }
+        catch (e) { break; }
+      }
+    }
+    if (!keyPool.length) return;
+    const a = keyPool[keyIdx++ % keyPool.length];
+    try { a.currentTime = 0; } catch (e) { /* 还没加载完时忽略 */ }
+    tryPlay(a);
+  }
+
+  return {
+    setMusicVolume: function (v) { audioSettings.music = v; writeSettings(); applyVolumes(); },
+    setSfxVolume:   function (v) { audioSettings.sfx   = v; writeSettings(); applyVolumes(); },
+    playSfx: function (name) {
+      if (name === 'key') return playKey();
+      if (!(audioSettings.sfx > 0)) return;
+      const a = build(name);
+      if (!a) return;
+      a.volume = audioSettings.sfx;
+      try { a.currentTime = 0; } catch (e) { /* 忽略 */ }
+      tryPlay(a);
+    },
+    playMusic: function () {
+      const a = build('bgm');
+      if (!a) return;
+      a.volume = audioSettings.music;
+      tryPlay(a);
+    },
+    stopMusic: function () {
+      if (els.bgm) { try { els.bgm.pause(); } catch (e) { /* 忽略 */ } }
+    },
+  };
+})();
 
 // 设置项 id → 音频通道(设置项表在 game-data.js 的 settings)
 const SETTING_APPLY = {
@@ -1913,6 +1996,7 @@ function showCover() {
   running = false;
   techVisible = false;
   stopAutoSave();
+  AudioSystem.stopMusic();   // V0.2.5:回封面就停背景音乐
   setInputEnabled(false);
   clearLog();
   hideAllPalettes();

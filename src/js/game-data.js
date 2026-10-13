@@ -8,7 +8,7 @@ const GAME_DATA = {
   title: "VN-CommandLineSystem 自复制探测器命令行系统",
 
   // 游戏版本号(与 plan.md / test_datalog.md 的版本保持一致)
-  version: "V0.2.4",
+  version: "V0.2.5",
 
   // 数值:全部集中在这里,方便"一次只调一样"
   numbers: {
@@ -340,8 +340,9 @@ const GAME_DATA = {
       when: { scan: 8 },
       lines: [
         { text: "[附加数据 · 残片 002 · 位置：B 区值班室]", cls: "relic" },
-        { text: "「第 4 天。轮到我们上屋顶了，风把灰吹得到处都是。」", cls: "relic" },
-        { text: "「我把它写下来，是因为下面越来越吵。」", cls: "relic" },
+        { text: "「第 4 天。B 区的终端还能亮，就是慢。」", cls: "relic" },
+        { text: "「我把充电线留在值班室了，谁先找到谁拿。」", cls: "relic" },
+        { text: "「今天也没人来接班。」", cls: "relic" },
         { text: "记录与当前任务无关。归档。" },
       ],
     },
@@ -384,7 +385,8 @@ const GAME_DATA = {
       lines: [
         { text: "[附加数据 · 残片 003 · 位置：C-7 机房]", cls: "relic" },
         { text: "「第 61 天。哭声停了。我们不再计数。」", cls: "relic" },
-        { text: "「地球系统会自动播下去。希望你——（此处数据缺失）」", cls: "relic" },
+        { text: "「上面把密钥交下来，只说了一句：清干净。」", cls: "relic" },
+        { text: "「我到今天才想明白，'清干净'说的是谁。（此处数据缺失）」", cls: "relic" },
         { text: "数据缺失。无法补全。" },
       ],
     },
@@ -400,8 +402,9 @@ const GAME_DATA = {
       when: { scan: 75 },
       lines: [
         { text: "[附加数据 · 残片 004 · 位置：发射台控制室]", cls: "relic" },
-        { text: "「最后一班岗。名单上只剩我一个没划掉。」", cls: "relic" },
+        { text: "「名单只剩一行，是我自己的名字。」", cls: "relic" },
         { text: "「如果醒的是你——你不是我们。请继续。」", cls: "relic" },
+        { text: "「广播我设成了自动。别嫌它吵。」", cls: "relic" },
         { text: "「继续」的语义未定义。按指令执行：复制自身。" },
       ],
     },

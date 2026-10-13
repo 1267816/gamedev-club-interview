@@ -120,6 +120,35 @@ function run() {
       await sleep(150);
       ok('松开后退出长按', peek('longPress') === false);
 
+      console.log('\n【3b. 星海漫游结局也要有作者的话入口】');
+      peek('game.ending = null; game.unlocked.push("starship");');
+      peek('doEnding("starry")');
+      await sleep(1800);   // 结局文字打完 → 1.6 秒后弹结算画面
+      ok('星海漫游的结算画面出现', !hidden('ending'));
+      ok('结算画面里有可点的 [ 作者的话 ]',
+        !!doc.getElementById('btn-end-author') && !doc.getElementById('btn-end-author').disabled);
+      doc.getElementById('btn-end-author').click();
+      await sleep(300);
+      ok('从星海漫游也能打开作者的话', !hidden('author'));
+      pressKey(doc, 'Escape');
+      await sleep(300);
+      ok('关掉后回到结算画面', hidden('author') && !hidden('ending'));
+
+      console.log('\n【7. 音频:三个素材都在,接口按音量工作】');
+      ok('音频接口有 playSfx / playMusic / stopMusic',
+        typeof peek('AudioSystem.playSfx') === 'function' && typeof peek('AudioSystem.playMusic') === 'function'
+        && typeof peek('AudioSystem.stopMusic') === 'function');
+      ok('三个素材的路径都指向 assets/audio/',
+        peek('JSON.stringify(AUDIO_FILES)').indexOf('assets/audio/key.wav') >= 0
+        && peek('JSON.stringify(AUDIO_FILES)').indexOf('assets/audio/notify.wav') >= 0
+        && peek('JSON.stringify(AUDIO_FILES)').indexOf('assets/audio/bgm.wav') >= 0,
+        peek('JSON.stringify(AUDIO_FILES)'));
+      ok('音效音量为 0 时不会去播(不会报错)', (function () {
+        const before = errors.length;
+        peek('audioSettings.sfx = 0; AudioSystem.playSfx("notify"); AudioSystem.playSfx("key"); audioSettings.sfx = 0.5;');
+        return errors.length === before;
+      })());
+
       console.log('\n【5. S20 闲置提示】');
       ok('闲置文案比原来多(>= 10 条)', peek('D.idleHints.length') >= 10, String(peek('D.idleHints.length')));
       // 清掉其它可能命中的条件,只留"研究进行中"这一条

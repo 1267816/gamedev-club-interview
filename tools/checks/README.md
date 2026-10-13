@@ -14,7 +14,8 @@ npm i jsdom
 然后:
 
 ```
-node run-all.js            # 一次跑完,打印每个套件的通过 / 失败与失败项
+node run-all.js            # 一次跑完(交付前跑这个)
+node run-all.js --quick    # 快速档:跳过最慢的 3 套,约 2.5 分钟(改代码时每轮跑它)
 node jsdom-05-economy.js   # 也可以单独跑某一个
 ```
 
@@ -30,7 +31,16 @@ node jsdom-05-economy.js   # 也可以单独跑某一个
 | `jsdom-08-v015.js` | V0.1.5 的报告项:效果文字尊重数据表、小数显示、解析器加速探测、类别问号恢复、账号级成就 |
 | `jsdom-09-research.js` | V0.2.0:立项 → 研究 → 完成、一次只研究一项、探测门槛、研究提速、终端有新消息、存档续研 |
 | `jsdom-10-fullrun.js` | **整局加速跑**:把 `Date.now` 换成 60 倍速时钟 + 自动玩家,20 秒跑完一局,验剧情不漏 / 不重复 / 顺序正确、14 项科技解锁、无 NaN |
-| `jsdom-11-v024.js` | V0.2.4 收尾轮:方案 B 数值口径、`/rep off` `/rep on`、作者的话接口与成就、S19 长按加速、S20 闲置文案、S21 打字机分级 |
+| `jsdom-11-v024.js` | V0.2.4~V0.2.5:方案 B 数值口径、`/rep off` `/rep on`、作者的话接口与成就(两种结局)、S19 长按加速、S20 闲置文案、S21 打字机分级、音频接口 |
+
+## 音频素材
+
+`assets/audio/` 里的三个 wav 是**本仓库自己合成**的(没有第三方素材,所以没有授权问题),
+生成脚本在 `tools/audio/make-audio.py`,想改音色就改参数重跑:
+
+```
+python tools/audio/make-audio.py
+```
 
 ## Chrome 套件（3 个）
 
