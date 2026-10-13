@@ -345,6 +345,32 @@ body::after {
 #tech-detail .d-research { color: var(--accent); }
 @keyframes blink { to { visibility: hidden; } }
 
+/* 音量提示(V0.2.7):开始前的一屏 —— 耳机图标 + 一句话,点 [ 进入 ] 才继续 */
+#audio-notice {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  z-index: 20;
+}
+#audio-notice .notice-box { text-align: center; color: var(--fg); }
+#audio-notice .notice-icon { width: 64px; height: 64px; color: var(--accent); }
+#audio-notice .notice-title { margin-top: 12px; font-size: 1.4em; color: var(--fg); }
+#audio-notice .notice-text  { margin-top: 8px; color: var(--dim); }
+#audio-notice .notice-menu  { margin-top: 20px; }
+#audio-notice .notice-menu button {
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 6px 18px;
+  cursor: pointer;
+}
+#audio-notice .notice-menu button:hover { border-color: var(--fg); }
+#audio-notice .notice-hint { margin-top: 14px; color: var(--dim); font-size: 0.85em; }
+
 #tech-ps1 { display: flex; align-items: center; gap: 8px; }
 #tech-input {
   flex: 1;

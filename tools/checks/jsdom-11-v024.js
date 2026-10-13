@@ -51,11 +51,11 @@ function run() {
       };
 
       await sleep(300);
-      doc.getElementById('btn-new').click();
+      w.eval('window.__skipAudioNotice = true'); doc.getElementById('btn-new').click();
       await sleep(9000);
 
       console.log('\n【1. 方案 B 的数值口径】');
-      ok('研究秒数 = 10 + 3n', peek('D.techs.every(function(t,i){return t.research === 10 + 3*i;})'),
+      ok('研究秒数固定 12 秒', peek('D.techs.every(function(t){return t.research === 12;})'),
         peek('JSON.stringify(D.techs.map(function(t){return t.research;}))'));
       ok('数据产出 0.45/秒', peek('D.numbers.decoderRate') === 0.45, String(peek('D.numbers.decoderRate')));
       ok('探测 0.008', peek('D.numbers.scanK') === 0.008, String(peek('D.numbers.scanK')));

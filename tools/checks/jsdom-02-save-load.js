@@ -62,7 +62,7 @@ const state = function (dom) {
 };
 
 async function main() {
-  await new Promise(function (r) { server.listen(8765, '127.0.0.1', r); });
+  await new Promise(function (r) { server.listen(8766, '127.0.0.1', r); });
 
   // A. F5 刷新(active:true + sessionStorage 还活着)→ 直接续玩,整屏日志回来,剧情不重复触发
   let a = await open({ save: save(), alive: true });

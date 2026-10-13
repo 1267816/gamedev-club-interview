@@ -67,7 +67,7 @@ function run() {
       const btn = (id) => doc.getElementById(id);
 
       await sleep(300);
-      doc.getElementById('btn-new').click();
+      w.eval('window.__skipAudioNotice = true'); doc.getElementById('btn-new').click();
       await sleep(9000);
       console.log('\n【A. 科技树实时刷新(bug 3)】');
       peek('game.unlocked = ["click_mine","click_rep"]; game.material = 10;');
@@ -156,7 +156,8 @@ function run() {
       await sleep(5200);
       ok('材料远低于成本×3 时它不动手(不再吃光材料)', peek('game.probes') === p0,
         '探测器 ' + p0 + ' → ' + peek('game.probes') + ',材料 ' + Math.round(peek('game.material')));
-      peek('game.material = game.material + probeCost() * 5');
+      // V0.2.7:仓库改加算之后,上限可能压住"成本×3" —— 先把仓库给够,再喂材料
+      peek('game.buildings.warehouse = 400; game.material = game.material + probeCost() * 5');
       const p1 = peek('game.probes');
       await sleep(5200);
       ok('材料充足时才自动复制', peek('game.probes') > p1, p1 + ' → ' + peek('game.probes'));

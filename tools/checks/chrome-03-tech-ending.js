@@ -68,7 +68,7 @@ async function main() {
   await js('localStorage.clear(); sessionStorage.clear()');
   await send('Page.navigate', { url: 'http://127.0.0.1:8781/index.html' });
   await sleep(1500);
-  await js("document.getElementById('btn-new').click()");
+  await js("window.__skipAudioNotice=true;document.getElementById('btn-new').click()");
   await sleep(6000);
   await js("game.unlocked = ['click_mine','click_rep','reactor','core','decode','drone','comm','autorep'];");
   await js("game.buildings = { warehouse: 4, reactor: 5, core: 3 }; game.modules = { decoder: 2, drone: 2, rep: 1 };");

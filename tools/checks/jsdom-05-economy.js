@@ -116,7 +116,7 @@ function run() {
       ok('封面版本号与 game-data.js 一致(' + GAME_VERSION + ')',
         doc.getElementById('cover-version').textContent.indexOf(GAME_VERSION) >= 0,
         doc.getElementById('cover-version').textContent);
-      doc.getElementById('btn-new').click();
+      w.eval('window.__skipAudioNotice = true'); doc.getElementById('btn-new').click();
       await sleep(9000);
       ok('第 1 台成本 = 10', peek('probeCost()') === 10, String(peek('probeCost()')));
       peek('game.probes = 2');
@@ -152,7 +152,8 @@ function run() {
       ok('仓库行被标了 over 类(列表里一眼能看出)', rows().some((r) => r.className.indexOf('st-') >= 0
         && r.querySelector('.t-cost') && r.querySelector('.t-cost').className.indexOf('over') >= 0));
       await buildWarehouse();
-      ok('扩建一次后上限 = 200 × 1.6 = 320', Math.abs(peek('matCap()') - 320) < 1e-6, String(peek('matCap()')));
+      // V0.2.7:仓库改成加算 —— 200 + 150 × 座数
+      ok('扩建一次后上限 = 200 + 150 = 350', Math.abs(peek('matCap()') - 350) < 1e-6, String(peek('matCap()')));
       const cap2 = await ensureCap(620);
       ok('继续扩建能把上限抬到 620 以上', cap2 >= 620, '上限 ' + cap2);
       await doNode('反应堆', 'tech');
@@ -215,7 +216,8 @@ function run() {
         String(Math.round(peek('game.material'))) + ' / 上限 ' + Math.round(peek('matCap()')));
       const cap0 = peek('matCap()');
       await act('仓库');
-      ok('扩建仓库后上限 ×1.6', Math.abs(peek('matCap()') - cap0 * 1.6) < 1e-6, cap0 + ' → ' + peek('matCap()'));
+      ok('扩建仓库后上限 +150(V0.2.7 加算)', Math.abs(peek('matCap()') - (cap0 + 150)) < 1e-6,
+        cap0 + ' → ' + peek('matCap()'));
 
       console.log('\n【F. 探测进度 + 长距离通信闸门】');
       peek('game.scan = 0; game.probes = 40');

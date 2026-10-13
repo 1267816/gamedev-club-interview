@@ -63,7 +63,7 @@ function run() {
           return r;
         };
       })()`);
-      doc.getElementById('btn-new').click();
+      w.eval('window.__skipAudioNotice = true'); doc.getElementById('btn-new').click();
       await sleep(9000);   // 启动序列(这里是真实时间,不受加速影响)
 
       // 自动玩家:这一局的目的是"走完全程看剧情",不是考玩家策略。

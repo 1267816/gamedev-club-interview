@@ -79,7 +79,7 @@ function run() {
         doc.getElementById('cover-version').textContent);
       ok('封面有 [ 成就 ] 按钮', !!doc.getElementById('btn-achievements'));
 
-      doc.getElementById('btn-new').click();
+      w.eval('window.__skipAudioNotice = true'); doc.getElementById('btn-new').click();
       await sleep(6000);
       ok('侧栏出现「科技 0 / 14」', doc.getElementById('readout').textContent.indexOf('0 / 14') >= 0,
         doc.getElementById('readout').textContent.trim().slice(0, 60));

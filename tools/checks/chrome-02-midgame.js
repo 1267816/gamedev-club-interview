@@ -66,7 +66,7 @@ async function main() {
   await js('localStorage.clear(); sessionStorage.clear()');
   await send('Page.navigate', { url: 'http://127.0.0.1:8777/index.html' });
   await sleep(1500);
-  await js("document.getElementById('btn-new').click()");
+  await js("window.__skipAudioNotice=true;document.getElementById('btn-new').click()");
   await sleep(6000);
   // 造一个中局状态(只为看 UI;数值本身由 smoke5 验证)
   await js("game.unlocked = ['click_mine','click_rep','reactor','core','decode','drone','comm'];");

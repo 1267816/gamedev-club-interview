@@ -60,7 +60,7 @@ function run() {
       };
 
       await sleep(300);
-      doc.getElementById('btn-new').click();
+      w.eval('window.__skipAudioNotice = true'); doc.getElementById('btn-new').click();
       await sleep(9000);   // 等启动序列打完
 
       console.log('\n【A. 立项:付钱、进入"研究中"】');
@@ -123,7 +123,7 @@ function run() {
       await sleep(150);
       ok('探测 0% 时「无人采集」显示锁定', rowByName('无人采集').className.indexOf('st-locked') >= 0,
         rowByName('无人采集').className);
-      ok('详情里写明探测门槛', doc.getElementById('tech-detail').textContent.indexOf('探测进度 2%') >= 0,
+      ok('详情里写明探测门槛', doc.getElementById('tech-detail').textContent.indexOf('探测进度 5%') >= 0,
         '[' + doc.getElementById('tech-detail').textContent.replace(/\s+/g, ' ') + ']');
       enter();
       await sleep(200);
@@ -181,10 +181,10 @@ function run() {
       console.log('\n【H. V0.2.0 的数值口径(科技表 / 探测参数)】');
       // 这几项是"科技线与探测线同时收尾"的前提,写死在这里防以后被悄悄改回去;
       // 和 tools/economy-sim.js 的一致性由 tools/check-parity.js 保证(72 项)
-      ok('科技的研究秒数 = 10 + 3n(V0.2.4 方案 B)', peek('D.techs.every(function(t,i){return t.research === 10 + 3*i;})'));
-      ok('9 项科技带探测门槛、数值是 2/8/14/22/32/45/58/68/75',
+      ok('科技的研究秒数固定 12 秒(V0.2.7:去掉线性增长)', peek('D.techs.every(function(t){return t.research === 12;})'));
+      ok('9 项科技带探测门槛、数值是 5/15/25/35/45/55/65/72/75',
         peek('JSON.stringify(D.techs.filter(function(t){return t.scanReq != null;}).map(function(t){return t.scanReq;}))')
-          === '[2,8,14,22,32,45,58,68,75]',
+          === '[5,15,25,35,45,55,65,72,75]',
         peek('JSON.stringify(D.techs.filter(function(t){return t.scanReq != null;}).map(function(t){return t.scanReq;}))'));
       ok('探测参数 = scanK 0.0065 / scanFalloff 140 / scanResearchMul 2',
         peek('D.numbers.scanK') === 0.008 && peek('D.numbers.scanFalloff') === 140

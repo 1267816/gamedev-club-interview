@@ -67,7 +67,7 @@ function run() {
       await sleep(300);
       console.log('[1] 封面可见:', !hidden('cover'), '| 版本:', doc.getElementById('cover-version').textContent);
 
-      doc.getElementById('btn-new').click();
+      w.eval('window.__skipAudioNotice = true'); doc.getElementById('btn-new').click();
       await sleep(7000);   // 启动序列(12 行 × 320ms)+ 引导打字
       console.log('[2] 启动后屏幕:', hidden('screen') ? 'screen 隐藏(异常)' : 'screen 可见');
       console.log('    提示行 hint:', JSON.stringify(doc.getElementById('hint').textContent));

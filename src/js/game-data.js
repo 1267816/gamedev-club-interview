@@ -8,7 +8,7 @@ const GAME_DATA = {
   title: "VN-CommandLineSystem 自复制探测器命令行系统",
 
   // 游戏版本号(与 plan.md / test_datalog.md 的版本保持一致)
-  version: "V0.2.6",
+  version: "V0.2.7",
 
   // 数值:全部集中在这里,方便"一次只调一样"
   numbers: {
@@ -20,15 +20,15 @@ const GAME_DATA = {
     idleHintSec:   180,   // 多久没有有效操作就让指南系统提示一句(秒)—— Q8:3 分钟
     // 能量 / 算力 / 数据(V0.1.2 接线;数值与 tools/economy-sim.js 完全一致)
     reactorRate:   2.0,   // 每台反应堆 能量/秒
-    reactorCap:    80,    // 每台反应堆提供的能量上限
+      reactorCap:    25,    // 每台反应堆提供的能量上限(V0.2.7:80 → 25,上限太高等于没有约束)
     coreDrain:     1.5,   // 每个计算核心 能量/秒
     slotPerCore:   1,     // 每个核心提供 1 个算力槽
     droneRatePerProbe: 0.12, // 每个采集助手:给**每台探测器** +0.12 材料/秒(随规模一起涨,不然中后期很废)
       decoderRate:   0.45,  // 每个解析器 数据/秒(V0.2.4 方案 B:0.3 → 0.45,配合数据成本下降)
     repEvery:      4,     // 复制助手:每 4 秒自动复制一次
     repReserve:    3,     // 复制助手只在材料 ≥ 复制成本 × 3 时动手(不然会把材料吃光)
-    warehouseCap:  200,   // 初始材料上限
-    warehouseMul:  1.6,   // 每座仓库把上限 ×1.6
+      warehouseCap:  200,   // 初始材料上限
+      warehouseAdd:  150,   // 每座仓库把上限 +150(V0.2.7:原来是 ×1.6 乘算 —— 不符合现实)
     // 星球探测进度(灵感 1):速率 = 探测器数 × scanK × (1 − 进度/scanFalloff) × (通信 ? 1 : scanNoCommMul)
       scanK:         0.008,    // V0.2.4 方案 B:0.0065 → 0.008(见 docs/plan.md 的 V0.2.4 节)
       scanFalloff:   140,      // V0.2.0:200 → 140(逼近 100% 时更明显地减速)
@@ -86,46 +86,46 @@ const GAME_DATA = {
   //   scanReq   需要探测进度先到这个百分比(0~100),否则显示"锁定";用来把科技线和探测线咬在一起
   //             (不写 = 没有扫描门槛)
   techs: [
-    { id: "click_mine", name: "简单采集", cat: "操作", cost: { material: 40 }, requires: [], research: 10,
+    { id: "click_mine", name: "简单采集", cat: "操作", cost: { material: 40 }, requires: [], research: 12,
       unlockCommand: "mine", effect: "解锁 /mine 的点击按钮",
       desc: "把采集流程固化成一个可反复调用的例程。" },
-    { id: "click_rep", name: "批量复制", cat: "操作", cost: { material: 140 }, requires: ["click_mine"], research: 13,
+    { id: "click_rep", name: "批量复制", cat: "操作", cost: { material: 140 }, requires: ["click_mine"], research: 12,
       unlockCommand: "replicate", effect: "解锁 /replicate 的点击按钮",
       desc: "把复制流程固化成一个可反复调用的例程。" },
-    { id: "reactor", name: "反应堆", cat: "硬件", cost: { material: 320 }, requires: ["click_rep"], research: 16,
+    { id: "reactor", name: "反应堆", cat: "硬件", cost: { material: 320 }, requires: ["click_rep"], research: 12,
       unlockBuilding: "reactor", effect: "可建造「反应堆」",
       desc: "重启休眠的聚变堆，可以获得额外的电力。" },
-    { id: "core", name: "计算核心", cat: "硬件", cost: { material: 620 }, requires: ["reactor"], research: 19,
+    { id: "core", name: "计算核心", cat: "硬件", cost: { material: 620 }, requires: ["reactor"], research: 12,
       unlockBuilding: "core", effect: "可建造「计算核心」",
       desc: "借用复制机构的空闲算力，跑一台协处理器。" },
-    { id: "decode", name: "信号解析", cat: "硬件", cost: { material: 560 }, requires: ["core"], research: 22,
+    { id: "decode", name: "信号解析", cat: "硬件", cost: { material: 560 }, requires: ["core"], research: 12,
       unlockModule: "decoder", unlockResource: "data", effect: "可安装「解析器」",
       desc: "重新接入那条没有收件人的广播，把它拆成可读的数据流。" },
-    { id: "drone", name: "无人采集", cat: "自动化", cost: { data: 3 }, requires: ["decode"], research: 25, scanReq: 2,
+    { id: "drone", name: "无人采集", cat: "自动化", cost: { data: 3 }, requires: ["decode"], research: 12, scanReq: 5,
       unlockModule: "drone", effect: "可安装「采集助手」",
       desc: "让机器自己去找矿，不必等操作者按下每一次采集。" },
-    { id: "comm", name: "长距离通信", cat: "通信", cost: { data: 5 }, requires: ["drone"], research: 28, scanReq: 8,
+    { id: "comm", name: "长距离通信", cat: "通信", cost: { data: 5 }, requires: ["drone"], research: 12, scanReq: 15,
       effect: "解除探测范围限制（×0.2 → ×1)",
       desc: "让探测器之间能长距离连接，离开基地。" },
-    { id: "autorep", name: "自主复制", cat: "自动化", cost: { data: 9 }, requires: ["comm"], research: 31, scanReq: 14,
+    { id: "autorep", name: "自主复制", cat: "自动化", cost: { data: 9 }, requires: ["comm"], research: 12, scanReq: 25,
       unlockModule: "rep", effect: "可安装「复制助手」",
       desc: "可以进行自主复制了。" },
-    { id: "probe_eff", name: "采集优化", cat: "产量", cost: { data: 14 }, requires: ["autorep"], research: 34, scanReq: 22,
+    { id: "probe_eff", name: "采集优化", cat: "产量", cost: { data: 14 }, requires: ["autorep"], research: 12, scanReq: 35,
       effect: "每台探测器产出 ×1.5",
       desc: "优化采集工作流，增加产出。" },
-    { id: "core_eff", name: "并行调度", cat: "软件", cost: { data: 22 }, requires: ["probe_eff"], research: 37, scanReq: 32,
+    { id: "core_eff", name: "并行调度", cat: "软件", cost: { data: 22 }, requires: ["probe_eff"], research: 12, scanReq: 45,
       effect: "每核心算力槽 ×2，耗能 ×0.8",
       desc: "让核心能够同时跑两条指令流，而且更省电。" },
-    { id: "decode_eff", name: "语义重构", cat: "解析", cost: { data: 32 }, requires: ["core_eff"], research: 40, scanReq: 45,
+    { id: "decode_eff", name: "语义重构", cat: "解析", cost: { data: 32 }, requires: ["core_eff"], research: 12, scanReq: 55,
       effect: "解析速率 ×1.6",
       desc: "不再逐字解析，而是猜整段的意思。" },
-    { id: "fusion", name: "聚变改良", cat: "能源", cost: { data: 47 }, requires: ["decode_eff"], research: 43, scanReq: 58,
+    { id: "fusion", name: "聚变改良", cat: "能源", cost: { data: 47 }, requires: ["decode_eff"], research: 12, scanReq: 65,
       effect: "反应堆输出 ×1.6",
       desc: "使用改良的聚变技术。" },
-    { id: "bootstrap", name: "递归自举", cat: "产量", cost: { data: 72 }, requires: ["fusion"], research: 46, scanReq: 68,
+    { id: "bootstrap", name: "递归自举", cat: "产量", cost: { data: 72 }, requires: ["fusion"], research: 12, scanReq: 72,
       effect: "每台探测器产出 ×2（累计 ×3)",
       desc: "复制机构开始复制自己的复制机构。" },
-    { id: "starship", name: "星际航行", cat: "结局", cost: { data: 102 }, requires: ["bootstrap"], research: 49, scanReq: 75,
+    { id: "starship", name: "星际航行", cat: "结局", cost: { data: 102 }, requires: ["bootstrap"], research: 12, scanReq: 75,
       secret: true, effect: "结局选择之一「前往太空」的前置",
       desc: "把复制机构从行星尺度改成恒星际尺度。" },
   ],

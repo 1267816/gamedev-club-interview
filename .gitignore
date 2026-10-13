@@ -5,3 +5,7 @@ tools/checks/package-lock.json
 # 编辑器 / 截图产物
 *.code-workspace
 *.png
+
+# Python 生成音频时可能留下的缓存
+__pycache__/
+*.pyc

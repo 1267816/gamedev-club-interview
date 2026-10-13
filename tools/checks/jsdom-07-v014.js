@@ -84,7 +84,7 @@ function run() {
       };
 
       await sleep(300);
-      doc.getElementById('btn-new').click();
+      w.eval('window.__skipAudioNotice = true'); doc.getElementById('btn-new').click();
       await sleep(9000);
       console.log('\n【要求 5:例行信息全部折叠,只有剧情用打字机】');
       peek('game.buildings = { warehouse: 5 }; game.material = 2000;');

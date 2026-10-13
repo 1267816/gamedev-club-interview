@@ -42,7 +42,7 @@ const P = {
   // ---- 能量层 ----
   reactorCost: 120, reactorGrowth: 1.18,
   reactorRate: 2.0,      // 能量/秒/台
-  reactorCap: 80,        // 每台提供的能量上限
+  reactorCap: 25,        // 每台提供的能量上限(V0.2.7:80 → 25 —— 上限太高等于没有约束)
 
   // ---- 算力层(槽位) ----
   coreCost: 220, coreGrowth: 1.18, coreDrain: 1.5, coreSlots: 1,
@@ -54,7 +54,7 @@ const P = {
   repReserve: 3,                                             // 只在材料 ≥ 成本×3 时动手
 
   // ---- 仓库:材料必须有地方放(D5 灵感 5) ----
-  whCost: 120, whGrowth: 1.16, whBaseCap: 200, whCapMul: 1.6,
+  whCost: 120, whGrowth: 1.16, whBaseCap: 200, whAdd: 150,   // V0.2.7:乘算 → 加算(每座 +150,更真实)
 
   // ---- 星球探测进度(灵感 1) ----
   // 速率系数(命令行第一个参数是数字时才当作 scanK,否则用默认值)
@@ -77,20 +77,22 @@ const P = {
 // 科技表(顺序 = 玩家模型的购买顺序;货币分工见 D8:点击/硬件用材料,自动化/倍率用数据)
 const TECHS = [
   // research = 研究秒数(V0.2.0);scanReq = 需要探测先到这个百分比(V0.2.0 的扫描闸门)
-  { id: 'click_mine', cost: { material: 40 },  research: 10 },
-  { id: 'click_rep',  cost: { material: 140 }, research: 13 },
-  { id: 'reactor',    cost: { material: 320 }, research: 16 },
-  { id: 'core',       cost: { material: 620 }, research: 19 },
-  { id: 'decode',     cost: { material: 560 }, research: 22 },
-  { id: 'drone',      cost: { data: 3 },   research: 25, scanReq: 2 },   // 无人采集
-  { id: 'comm',       cost: { data: 5 },   research: 28, scanReq: 8 },   // 长距离通信(解除探测 ×0.2)
-  { id: 'autorep',    cost: { data: 9 },   research: 31, scanReq: 14 },  // 自主复制
-  { id: 'probe_eff',  cost: { data: 14 },  research: 34, scanReq: 22 },  // 采集优化 ×1.5
-  { id: 'core_eff',   cost: { data: 22 },  research: 37, scanReq: 32 },  // 并行调度:槽 ×2、耗能 ×0.8
-  { id: 'decode_eff', cost: { data: 32 },  research: 40, scanReq: 45 },  // 语义重构:解析 ×1.6
-  { id: 'fusion',     cost: { data: 47 },  research: 43, scanReq: 58 },  // 聚变改良:反应堆 ×1.6
-  { id: 'bootstrap',  cost: { data: 72 },  research: 46, scanReq: 68 },  // 递归自举:探测器 ×2
-  { id: 'starship',   cost: { data: 102 }, research: 49, scanReq: 75 },  // 星际航行(结局前置)
+  // V0.2.7:研究时长改成**固定的 12 秒**(原来 10+3n 线性增长 → 后期全在等研究);
+  //         探测门槛抬高,让"探测进度"真正成为节奏的把手,而不是形同虚设。
+  { id: 'click_mine', cost: { material: 40 },  research: 12 },
+  { id: 'click_rep',  cost: { material: 140 }, research: 12 },
+  { id: 'reactor',    cost: { material: 320 }, research: 12 },
+  { id: 'core',       cost: { material: 620 }, research: 12 },
+  { id: 'decode',     cost: { material: 560 }, research: 12 },
+  { id: 'drone',      cost: { data: 3 },   research: 12, scanReq: 5 },    // 无人采集
+  { id: 'comm',       cost: { data: 5 },   research: 12, scanReq: 15 },   // 长距离通信(解除探测 ×0.2)
+  { id: 'autorep',    cost: { data: 9 },   research: 12, scanReq: 25 },   // 自主复制
+  { id: 'probe_eff',  cost: { data: 14 },  research: 12, scanReq: 35 },   // 采集优化 ×1.5
+  { id: 'core_eff',   cost: { data: 22 },  research: 12, scanReq: 45 },   // 并行调度:槽 ×2、耗能 ×0.8
+  { id: 'decode_eff', cost: { data: 32 },  research: 12, scanReq: 55 },   // 语义重构:解析 ×1.6
+  { id: 'fusion',     cost: { data: 47 },  research: 12, scanReq: 65 },   // 聚变改良:反应堆 ×1.6
+  { id: 'bootstrap',  cost: { data: 72 },  research: 12, scanReq: 72 },   // 递归自举:探测器 ×2
+  { id: 'starship',   cost: { data: 102 }, research: 12, scanReq: 75 },   // 星际航行(钉在回声塔那一刻)
 ];
 
 // 剧情节点:挂在探测进度上;tech 型节点挂在科技解锁上
@@ -113,7 +115,7 @@ const droneCost   = (n) => P.droneCost     * Math.pow(P.droneGrowth, n);
 const decoderCost = (n) => P.decoderCost   * Math.pow(P.decoderGrowth, n);
 const repCost     = (n) => P.repCost       * Math.pow(P.repGrowth, n);
 const whCost      = (n) => P.whCost        * Math.pow(P.whGrowth, n);
-const matCap      = (n) => P.whBaseCap     * Math.pow(P.whCapMul, n);
+const matCap      = (n) => P.whBaseCap + P.whAdd * n;   // V0.2.7:加算(每座 +whAdd)
 
 function newState() {
   return {

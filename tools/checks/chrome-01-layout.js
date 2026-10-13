@@ -86,7 +86,7 @@ async function main() {
   ok('封面无横向溢出', await js('document.documentElement.scrollWidth <= window.innerWidth'));
   await shot('-cover');
 
-  await js("document.getElementById('btn-new').click()");
+  await js("window.__skipAudioNotice=true;document.getElementById('btn-new').click()");
   await sleep(6000);
   await js('game.material = 900');
   await js("(function(){var i=document.getElementById('cmd-input');i.value='/research';i.dispatchEvent(new Event('input',{bubbles:true}));i.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',cancelable:true,bubbles:true}));})()");

@@ -26,12 +26,29 @@
     </div>
   </div>
 
-  <!-- 设置:音乐 / 音效音量(音频接口已就绪,暂未加载素材) -->
+  <!-- 音量提示(V0.2.7):开始前先占满一屏,点了才进游戏 ——
+       这一下点击同时解决了浏览器的"必须由用户手势才能放声音"的限制 -->
+  <div id="audio-notice" class="hidden">
+    <div class="notice-box">
+      <svg class="notice-icon" viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M32 6c-11 0-20 9-20 20v14h8V26h-4c0-8.8 7.2-16 16-16s16 7.2 16 16h-4v14h8V26c0-11-9-20-20-20z"
+              fill="none" stroke="currentColor" stroke-width="3"/>
+        <rect x="10" y="38" width="10" height="18" rx="4" fill="currentColor"/>
+        <rect x="44" y="38" width="10" height="18" rx="4" fill="currentColor"/>
+      </svg>
+      <div class="notice-title">建议开启音量</div>
+      <div class="notice-text">戴上耳机，以获得最佳游戏体验。</div>
+      <div class="notice-menu"><button id="btn-notice-go">[ 进入 ]</button></div>
+      <div class="notice-hint">（音量可在封面 [ 设置 ] 里随时调整）</div>
+    </div>
+  </div>
+
+  <!-- 设置:音乐 / 音效音量(素材在 assets/audio/,由 tools/audio/make-audio.py 生成) -->
   <div id="settings" class="hidden">
     <div class="panel">
       <div class="panel-title">设置</div>
       <div id="settings-list"></div>
-      <div class="panel-note">音频接口已就绪,暂未加载音频素材。</div>
+      <div class="panel-note">音乐与音效都在 assets/audio/，拖到 0 即为静音。</div>
       <div class="panel-menu">
         <button id="btn-settings-back">[ 返回 ]</button>
       </div>

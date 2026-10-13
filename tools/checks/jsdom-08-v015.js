@@ -84,7 +84,7 @@ function run() {
       ok('启动时读到了旧成就(9 个)', peek('game.achievements').length === 9, String(peek('game.achievements').length));
       peek('resetGame()');
       ok('resetGame() 不会清空成就', peek('game.achievements').length === 9, String(peek('game.achievements').length));
-      doc.getElementById('btn-new').click();
+      w.eval('window.__skipAudioNotice = true'); doc.getElementById('btn-new').click();
       await sleep(9000);
       ok('点了「新游戏」之后成就还在', peek('game.achievements').length === 9, String(peek('game.achievements').length));
       ok('新档里也不会重复弹已获得的成就',

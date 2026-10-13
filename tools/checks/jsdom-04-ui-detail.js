@@ -89,7 +89,7 @@ function run() {
       ok('封面 5 个按钮', doc.querySelectorAll('.cover-menu button').length === 5,
         [].map.call(doc.querySelectorAll('.cover-menu button'), (b) => b.textContent).join(''));
 
-      doc.getElementById('btn-new').click();
+      w.eval('window.__skipAudioNotice = true'); doc.getElementById('btn-new').click();
       await sleep(6000);
       ok('侧栏含「科技 0 / 14」', doc.getElementById('readout').textContent.indexOf('0 / 14') >= 0);
       ok('没有 [ /mine ] 按钮(未解锁)', !doc.getElementById('btn-mine'));
@@ -106,7 +106,8 @@ function run() {
       ok('1e6 / 1.5e9 / 2e12', peek("fmtNum(1e6)") === '1.00M' && peek("fmtNum(1.5e9)") === '1.50B'
         && peek("fmtNum(2e12)") === '2.00T', [peek("fmtNum(1e6)"), peek("fmtNum(1.5e9)"), peek("fmtNum(2e12)")].join(' '));
       ok('1e15 → 1.00Qa(不出现 e+15)', peek("fmtNum(1e15)") === '1.00Qa', peek("fmtNum(1e15)"));
-      peek('game.buildings = { warehouse: 10 }');   // 上限够高,材料才放得下
+      // V0.2.7:仓库改成加算(200 + 150×n),所以要多放几座才装得下 12345
+      peek('game.buildings = { warehouse: 100 }');
       peek('game.material = 12345');
       await sleep(250);   // 面板是 tick 里渲染的,等一下再断言
       ok('侧栏确实显示缩写', doc.getElementById('readout').textContent.indexOf('12.35K') >= 0,
@@ -355,7 +356,7 @@ function run() {
       ok('残缺档 → readSave 仍能解析', peek('readSave()') !== null);
 
       console.log('\n【L. 剧情回归(老功能没坏)】');
-      doc.getElementById('btn-new').click();
+      w.eval('window.__skipAudioNotice = true'); doc.getElementById('btn-new').click();
       await sleep(10000);   // 等启动序列 + P1/P1b 都打完,队列空了再测折叠
       for (let i = 0; i < 12; i++) type('cmd-input', '/mine');
       await sleep(500);

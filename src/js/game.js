@@ -73,7 +73,8 @@ function effects() {
 }
 
 // —— 各资源的速率 / 上限 ——
-function matCap()      { return D.numbers.warehouseCap * Math.pow(D.numbers.warehouseMul, bCount('warehouse')); }
+// 材料上限(V0.2.7):加算 —— 200 + 150 × 仓库数(原来是 ×1.6 乘算,不符合现实)
+function matCap()      { return D.numbers.warehouseCap + D.numbers.warehouseAdd * bCount('warehouse'); }
 // 采集助手按"每台探测器"加成:规模越大越有用(用户反馈:原来是死板的 +1.5/秒,中后期毫无意义)
 function matRate() {
   return game.probes * (D.numbers.probeOutput * effects().probeMul
@@ -350,6 +351,7 @@ function tick() {
   }
 
   advanceResearch();             // V0.2.0:研究进度;到时间就解锁并写日志
+  AudioSystem.ensureMusic();     // V0.2.7:兜底 —— 音乐被浏览器停掉就补回来(大退重进 / 切标签页)
   const told = checkStory();     // 数值一达标,剧情 / 引导就顺着打出来
   if (told && techVisible) storyPendingSince = storyPendingSince == null ? game.timeSec : storyPendingSince;
   updateTechPending();           // 科技树里那行"终端有新消息"
@@ -1432,6 +1434,7 @@ function doEnding(kind) {
   // 动手之前先把"选择时刻"的账存下来,之后可以回来重选
   game.choiceSnapshot = choiceSnapshotState();
   game.ending = kind;
+  AudioSystem.wantMusic('ending');   // V0.2.7:结局换成那段推上去的音乐
   // V0.2.6:结局长文 —— 支持三种行:字符串(机器日志)、""(空行,分段用)、
   // { text, cls }(cls: "relic" 会走人类残片的慢节奏与暖色)
   for (const line of e.lines) {
@@ -1453,9 +1456,13 @@ function doEnding(kind) {
   buildCommands();          // 两个选项按钮消失
   writeSave(snapshot());    // 立刻存档:结局这种节点不能丢
   render();
-  // 等整段结局长文打完再弹结算画面 —— 不然 1.6 秒就把长文打断在中间了(最多等 2 分钟兜底)
+  // 等整段结局长文打完、再留几秒给人回味,然后才弹结算画面。
+  // (V0.2.7:用户报"最后一行一出现就立刻跳到结束页面,没时间看" —— 所以加了这段停顿)
   const waitThen = function (tries) {
-    if ((queue.length === 0 && !busy) || tries <= 0) { showEnding(kind); return; }
+    if ((queue.length === 0 && !busy) || tries <= 0) {
+      setTimeout(function () { showEnding(kind); }, 3500);   // 留 3.5 秒
+      return;
+    }
     setTimeout(function () { waitThen(tries - 1); }, 300);
   };
   setTimeout(function () { waitThen(400); }, 300);
@@ -1725,7 +1732,7 @@ function startNew() {
   showScreen('game');
   startAutoSave();
   writeSave(snapshot());
-  AudioSystem.playMusic();   // V0.2.5:点 [ 新游戏 ] 就是一次用户手势,这时候起背景音乐
+  AudioSystem.wantMusic('bgm');   // V0.2.7:记住"该放哪首",被浏览器拦了也有兜底
   boot();
 }
 
@@ -1743,6 +1750,7 @@ function startLoaded(d) {
   render();
   log('存档已载入。', { cls: 'ok' });
   log('  从 T+' + fmtTime(game.timeSec) + ' 继续。', { cls: 'dim' });
+  AudioSystem.wantMusic('bgm');   // V0.2.7:从封面读档也要起音乐
   buildCommands();
   startAutoSave();
 }
@@ -1758,7 +1766,7 @@ function resumeSession(d) {
   renderHistory(game.logHistory);
   buildCommands();
   startAutoSave();
-  AudioSystem.playMusic();   // V0.2.5:续玩时也起音乐(读档是一次点击,已经算用户手势)
+  AudioSystem.wantMusic('bgm');   // V0.2.7:读档也起音乐(原来只在新游戏里起 → 用户报"重载后没音乐")
 }
 
 // 把整段日志历史原样贴回终端
@@ -1846,16 +1854,18 @@ function writeSettings() {
 const AUDIO_FILES = {
   key:    'assets/audio/key.wav',      // 打字机按键声
   notify: 'assets/audio/notify.wav',   // 重要信息(成就)提示音
-  bgm:    'assets/audio/bgm.wav',      // 背景音乐(20 秒循环)
+  bgm:    'assets/audio/bgm.wav',      // 背景音乐(40 秒循环)
+  ending: 'assets/audio/ending.wav',   // V0.2.7:结局音乐(32 秒,推上去的那种)
 };
 
 const AudioSystem = (function () {
   const KEY_POOL = 4;      // 按键声要能叠着响 → 用一个小池子轮流放
-  const KEY_MIN_GAP = 55;  // 两次按键声之间至少隔 55ms,不然打字太快会糊成一片
-  const els = {};          // notify / bgm 各一个元素
+  const KEY_MIN_GAP = 70;  // 两次按键声之间至少隔 70ms(V0.2.7:55 → 70,更安静一点)
+  const els = {};          // notify / bgm / ending 各一个元素
   let keyPool = [];
   let keyIdx = 0;
   let lastKeyAt = 0;
+  let musicWanted = null;  // 现在"应该"放哪首音乐(null = 不放)。用来兜底重播。
 
   // jsdom / 老浏览器里可能没有 Audio —— 没有音频也要能正常玩
   function canPlay() { return typeof window !== 'undefined' && typeof window.Audio === 'function'; }
@@ -1866,8 +1876,8 @@ const AudioSystem = (function () {
     try {
       const a = new window.Audio(AUDIO_FILES[name]);
       a.preload = 'auto';
-      if (name === 'bgm') a.loop = true;
-      a.volume = (name === 'bgm') ? audioSettings.music : audioSettings.sfx;
+      if (name === 'bgm' || name === 'ending') a.loop = true;   // 两首都循环
+      a.volume = (name === 'bgm' || name === 'ending') ? audioSettings.music : audioSettings.sfx;
       els[name] = a;
     } catch (e) { els[name] = null; }
     return els[name];
@@ -1884,6 +1894,7 @@ const AudioSystem = (function () {
 
   function applyVolumes() {
     if (els.bgm) els.bgm.volume = audioSettings.music;
+    if (els.ending) els.ending.volume = audioSettings.music;
     if (els.notify) els.notify.volume = audioSettings.sfx;
     keyPool.forEach(function (a) { a.volume = audioSettings.sfx; });
   }
@@ -1908,6 +1919,23 @@ const AudioSystem = (function () {
   return {
     setMusicVolume: function (v) { audioSettings.music = v; writeSettings(); applyVolumes(); },
     setSfxVolume:   function (v) { audioSettings.sfx   = v; writeSettings(); applyVolumes(); },
+    // 记住"该放哪首",并由 ensureMusic() 定时兜底 —— 浏览器在大退重进 / 切标签页 /
+    // 自动播放被拒之后可能把音乐停掉,靠这个补回来(用户报过"过几分钟音乐就没了")。
+    wantMusic: function (name) {
+      musicWanted = (name && audioSettings.music > 0) ? name : null;
+      if (musicWanted) this.playMusic(musicWanted);
+    },
+    ensureMusic: function () {
+      if (!musicWanted || !(audioSettings.music > 0)) return;
+      const a = build(musicWanted);
+      if (!a) return;
+      // 另一首在响就先停掉,避免两首叠着
+      for (const k in els) {
+        if (k !== musicWanted && els[k] && !els[k].paused) { try { els[k].pause(); } catch (e) { /* 忽略 */ } }
+      }
+      if (a.paused) { a.volume = audioSettings.music; tryPlay(a); }
+    },
+    currentMusic: function () { return musicWanted; },
     playSfx: function (name) {
       if (name === 'key') return playKey();
       if (!(audioSettings.sfx > 0)) return;
@@ -1917,14 +1945,17 @@ const AudioSystem = (function () {
       try { a.currentTime = 0; } catch (e) { /* 忽略 */ }
       tryPlay(a);
     },
-    playMusic: function () {
-      const a = build('bgm');
+    playMusic: function (name) {
+      const which = name || musicWanted || 'bgm';
+      const a = build(which);
       if (!a) return;
       a.volume = audioSettings.music;
       tryPlay(a);
     },
     stopMusic: function () {
+      musicWanted = null;
       if (els.bgm) { try { els.bgm.pause(); } catch (e) { /* 忽略 */ } }
+      if (els.ending) { try { els.ending.pause(); } catch (e) { /* 忽略 */ } }
     },
   };
 })();
@@ -1972,12 +2003,32 @@ function openSettings() {
   showScreen('settings');
 }
 
+/* ---------- 音量提示(V0.2.7) ----------
+   开始之前先占满一屏,点了 [ 进入 ] 才真正开始。
+   好处有两个:① 明确告诉玩家开音量;② 那一下点击就是"用户手势",
+   浏览器从此允许放声音(解决"重载后没音乐")。
+   注意:这几个变量必须在**顶层**声明 —— showCover() 也会用到 audioNoticeEl。 */
+const audioNoticeEl = document.getElementById('audio-notice');
+let noticeNext = null;
+function askAudioThen(next) {
+  // 自测脚本要跳过一次点击(它们每次都是新页面,没必要每次点两下)
+  if (window.__skipAudioNotice) { next(); return; }
+  noticeNext = next;
+  audioNoticeEl.classList.remove('hidden');
+}
+document.getElementById('btn-notice-go').onclick = function () {
+  audioNoticeEl.classList.add('hidden');
+  const f = noticeNext;
+  noticeNext = null;
+  if (f) f();   // 这一次点击就是用户手势 → 里面的 wantMusic 会被允许
+};
+
 /* ---------- 封面 ---------- */
 function bindCover() {
-  document.getElementById('btn-new').onclick = startNew;
-  document.getElementById('btn-load').onclick = function () {
+document.getElementById('btn-new').onclick = function () { askAudioThen(startNew); };
+document.getElementById('btn-load').onclick = function () {
     const d = readSave();
-    if (d) startLoaded(d);
+      if (d) askAudioThen(function () { startLoaded(d); });   // 读档也先过音量提示(同样是用户手势)
   };
   document.getElementById('btn-achievements').onclick = openAchievements;
   document.getElementById('btn-settings').onclick = openSettings;
@@ -2007,6 +2058,7 @@ function showCover() {
   techVisible = false;
   stopAutoSave();
   AudioSystem.stopMusic();   // V0.2.5:回封面就停背景音乐
+  if (audioNoticeEl) audioNoticeEl.classList.add('hidden');
   setInputEnabled(false);
   clearLog();
   hideAllPalettes();

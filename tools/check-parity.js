@@ -40,7 +40,7 @@ cmp('decoderRate / decoderRate', G.numbers.decoderRate, sim.decoderRate);
 cmp('repEvery / repEvery', G.numbers.repEvery, sim.repEvery);
 cmp('repReserve / repReserve', G.numbers.repReserve, sim.repReserve);
 cmp('warehouseCap / whBaseCap', G.numbers.warehouseCap, sim.whBaseCap);
-cmp('warehouseMul / whCapMul', G.numbers.warehouseMul, sim.whCapMul);
+cmp('warehouseAdd / whAdd', G.numbers.warehouseAdd, sim.whAdd);
 cmp('scanK / scanK', G.numbers.scanK, sim.scanK);
 cmp('scanFalloff / scanFalloff', G.numbers.scanFalloff, sim.scanFalloff);
 cmp('scanNoCommMul / scanNoCommMul', G.numbers.scanNoCommMul, sim.scanNoCommMul);
