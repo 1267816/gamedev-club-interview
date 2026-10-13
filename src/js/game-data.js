@@ -8,7 +8,7 @@ const GAME_DATA = {
   title: "VN-CommandLineSystem 自复制探测器命令行系统",
 
   // 游戏版本号(与 plan.md / test_datalog.md 的版本保持一致)
-  version: "V0.2.5",
+  version: "V0.2.6",
 
   // 数值:全部集中在这里,方便"一次只调一样"
   numbers: {
@@ -142,7 +142,6 @@ const GAME_DATA = {
     { id: "whole_earth", name: "再无空白", desc: "我们扫过了地球上最后一片土地。", when: { scan: 100 } },
     { id: "gravekeeper", name: "守墓“人”", desc: "选择留在地球。", when: { ending: "gravekeeper" } },
     { id: "star_wanderer", name: "星海漫游", desc: "选择前往太空。", when: { ending: "starry" } },
-    { id: "authors_note", name: "作者的话", desc: "感谢游玩！", when: { readAuthorsNote: true } },
   ],
 
   // 开局一行行打印的启动日志。
@@ -501,25 +500,4 @@ const GAME_DATA = {
     },
   },
 
-  // ============================================================
-  // 作者的话(S19)。**这是留给"你"写文字的地方** —— 接口已经做好:
-  // 结局结算画面上的 [ 作者的话 ] 按钮 → 打开这个页面;看完 / 按 Esc 返回;
-  // 打开过一次就记下 readAuthorsNote(成就「作者的话」靠它解锁)。
-  //
-  // 怎么写:title 是页头那句;lines 一行一条,支持 { text, cls }(cls 可省略)。
-  //   cls: "dim" 暗色 / "relic" 暖色(人类遗物) / "ach" 成就色 —— 现在写的是占位,直接换掉即可。
-  //   paragraphs 是空行(排版用),也可以整段删掉。
-  // ============================================================
-  authorsNote: {
-    title: "作者的话",
-    lines: [
-      { text: "（这里是占位文本，等你写。）", cls: "dim" },
-      { text: "" },
-      { text: "感谢游玩《星海漫游》。", },
-      { text: "这是一台机器的故事，也是写下它的人想说的话。", cls: "dim" },
-      { text: "" },
-      { text: "—— 期待你的定稿。", cls: "relic" },
-    ],
-    foot: "[ Esc 或 /back 返回 ]",
-  },
 };

@@ -182,7 +182,8 @@ function run() {
         lines().slice(-2).join(' | '));
       ok('仍然没有结局', peek('game.ending') === null);
       type('cmd-input', '/stay');
-      await sleep(2200);
+      // V0.2.6:结局长文打完之后才弹结算画面 —— 这里等它出现,而不是死等固定秒数
+      await (async function () { for (let i = 0; i < 60; i++) { if (!hidden('ending')) return; await sleep(300); } })();
       ok('选 /stay 进入结局', peek('game.ending') === 'gravekeeper', String(peek('game.ending')));
       ok('成就「守墓人」到手', peek('game.achievements').indexOf('gravekeeper') >= 0,
         JSON.stringify(peek('game.achievements')));
@@ -230,7 +231,8 @@ function run() {
       peek('game.unlocked.push("starship"); game.data = 0; buildCommands();');
       await sleep(300);
       type('cmd-input', '/go');
-      await sleep(2200);
+      // V0.2.6:星海漫游的长文更久 —— 等结算画面出现(而不是死等 2.2 秒)
+      await (async function () { for (let i = 0; i < 60; i++) { if (!hidden('ending')) return; await sleep(300); } })();
       ok('解锁星际航行后 /go 成功', peek('game.ending') === 'starry', String(peek('game.ending')));
       ok('成就「星海漫游」到手', peek('game.achievements').indexOf('star_wanderer') >= 0);
       ok('结算画面换成星海漫游', doc.getElementById('end-title').textContent.indexOf('星海漫游') >= 0,

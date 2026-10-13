@@ -201,7 +201,7 @@ function run() {
       const achText = doc.getElementById('ach-list').textContent;
       ok('只显示已获得的成就(隐藏未获得)', achText.indexOf('我们开始思考') >= 0
         && achText.indexOf('回声塔') < 0, achText.slice(0, 60));
-      ok('成就计数 2 / 10', doc.getElementById('ach-count').textContent.indexOf('2 / 10') >= 0,
+      ok('成就计数 2 / 9(V0.2.6:「作者的话」成就已删)', doc.getElementById('ach-count').textContent.indexOf('2 / 9') >= 0,
         doc.getElementById('ach-count').textContent);
 
       console.log('\n控制台报错:', errors.length ? JSON.stringify(errors, null, 1) : '无');

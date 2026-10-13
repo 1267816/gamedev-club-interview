@@ -345,18 +345,6 @@ body::after {
 #tech-detail .d-research { color: var(--accent); }
 @keyframes blink { to { visibility: hidden; } }
 
-/* 作者的话(S19):一页居中文本。正文与配色都来自 game-data.js 的 authorsNote.lines */
-#author-body {
-  margin: 14px 0;
-  min-height: 6em;
-  line-height: 1.9;
-  color: var(--fg);
-  text-align: left;
-}
-#author-body .author-line { min-height: 1.9em; }
-#author-body .author-line.dim   { color: var(--dim); }
-#author-body .author-line.relic { color: var(--relic); }
-#author-body .author-line.ach   { color: var(--accent); }
 #tech-ps1 { display: flex; align-items: center; gap: 8px; }
 #tech-input {
   flex: 1;

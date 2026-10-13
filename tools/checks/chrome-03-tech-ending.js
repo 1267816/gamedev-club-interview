@@ -98,7 +98,11 @@ async function main() {
   await js("(function(){var i=document.getElementById('tech-input');i.value='/back';i.dispatchEvent(new Event('input',{bubbles:true}));i.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',cancelable:true,bubbles:true}));})()");
   await sleep(400);
   await js("document.getElementById('btn-go').click()");
-  await sleep(2600);
+  // V0.2.6:结局是一段长文,打完才弹结算画面 —— 这里轮询等它出现(最多 60 秒)
+  for (let i = 0; i < 120; i++) {
+    if (await js("!document.getElementById('ending').classList.contains('hidden')")) break;
+    await sleep(500);
+  }
   ok('结算画面出现', await js("!document.getElementById('ending').classList.contains('hidden')"),
     await js("document.getElementById('end-title').textContent"));
   const centered = await js("(function(){var p=document.querySelector('#ending .panel').getBoundingClientRect();" +

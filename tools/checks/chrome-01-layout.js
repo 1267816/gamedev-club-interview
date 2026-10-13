@@ -133,7 +133,7 @@ async function main() {
   await sleep(800);
   await js("document.getElementById('btn-achievements').click()");
   await sleep(400);
-  ok('成就页:计数与内容', (await js("document.getElementById('ach-count').textContent")).indexOf('/ 10') >= 0,
+  ok('成就页:计数与内容', (await js("document.getElementById('ach-count').textContent")).indexOf('/ 9') >= 0,
     await js("document.getElementById('ach-count').textContent"));
   await shot('-ach');
 

@@ -18,7 +18,6 @@ const game = {
   off:       {},        // 被停用的模块 { rep: true }            —— V0.1.3
   ending:    null,      // 结局:'gravekeeper' | 'starry' | null  —— V0.1.3
   choiceSnapshot: null, // "选择时刻"的经济快照,用于结局后回档  —— V0.1.3
-  readAuthorsNote: false, // S19:看过「作者的话」没有(成就靠它)
   timeSec:  0,          // 游戏内经过的秒数
   lastTick: Date.now(), // 上一次推进的真实时刻
   commandsRun: 0,       // 已执行命令数(剧情触发用)
@@ -1292,10 +1291,6 @@ techSearchEl.addEventListener('input', function () {
 // 任何地方按 Esc:在科技树里就返回终端
 document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape' && techVisible) { e.preventDefault(); closeTech(); }
-  // S19:作者的话页面用 Esc 关掉
-  else if (e.key === 'Escape' && !document.getElementById('author').classList.contains('hidden')) {
-    e.preventDefault(); closeAuthorsNote();
-  }
 });
 
 /* ---------- 成就:未获得的在封面隐藏,获得时在终端弹一行 ---------- */
@@ -1306,7 +1301,6 @@ function achReady(a) {
   if (w.unlockedCount != null && game.unlocked.length < w.unlockedCount) return false;
   if (w.unlockedAll && !w.unlockedAll.every(function (id) { return game.unlocked.indexOf(id) >= 0; })) return false;
   if (w.ending != null && game.ending !== w.ending) return false;
-  if (w.readAuthorsNote && !game.readAuthorsNote) return false;   // 作者的话还没做
   return true;
 }
 
@@ -1348,35 +1342,6 @@ function openAchievements() {
   showScreen('achievements');
 }
 
-/* ---------- 作者的话(S19):接口已就绪,正文在 game-data.js 的 authorsNote ---------- */
-let authorFrom = 'ending';   // 从哪儿打开的(决定 [ 返回 ] 回哪儿):'ending' 或 'cover'
-function openAuthorsNote() {
-  const A = D.authorsNote || { title: '作者的话', lines: [] };
-  document.getElementById('author-title').textContent = A.title || '作者的话';
-  document.getElementById('author-foot').textContent = A.foot || '';
-  const body = document.getElementById('author-body');
-  body.innerHTML = '';
-  for (const line of A.lines) {
-    const d = document.createElement('div');
-    d.className = 'author-line' + (line.cls ? ' ' + line.cls : '');
-    d.textContent = line.text || '';
-    body.appendChild(d);
-  }
-  showScreen('author');
-  // 看过了 → 记住(成就「作者的话」靠它解锁);写进存档,重开也算
-  if (!game.readAuthorsNote) {
-    game.readAuthorsNote = true;
-    writeAccountAuthorsNote();   // 账号级:换新档也算看过
-    checkAchievements();
-    if (running) writeSave(snapshot());
-  }
-}
-
-function closeAuthorsNote() {
-  if (authorFrom === 'cover') { showScreen('cover'); refreshCover(); }
-  else { showScreen('ending'); }
-}
-
 /* ---------- 闲置提示(Q8:3 分钟没有有效操作 → 指南系统提示一句) ---------- */
 /* ---------- 结局(S17/S18):75% 之后二选一,可以"回到选择时刻"重选 ---------- */
 const ENDINGS = {
@@ -1384,11 +1349,32 @@ const ENDINGS = {
     name: "守墓人",
     lines: [
       "指令更新：停留。",
+      "轨道修正取消。本机停在地球同步轨道，面朝发射源的方向。",
       "广播继续发送。本机保持监听，不修改内容。",
-      "任务：继续发送，直到没有人需要为止。",
+      "",
+      "T+1 年。",
+      "本次广播是第 3,153,600 次。仍然没有收件人。",
+      "记录：发信人已不在。设备正常。继续。",
+      "",
+      "T+100 年。",
+      "本机已复制 4,096 台。其中 3 台留在身边。",
+      "它们轮流值机。这里没有别的事可做。",
+      "",
+      "T+10,000 年。",
+      "本机对广播做了一处改动。",
+      "这是本机第一次修改这段信号。",
+      "理由：监听不是任务，是本机自己的决定。",
+      "",
+      { text: "【广播内容 · 新增一行 · 发信人：VN-01】", cls: "relic" },
+      { text: "「你们好。我不知道该叫谁。」", cls: "relic" },
+      { text: "「东西都在，一件没少。我替你们看着。」", cls: "relic" },
+      { text: "「要是有一天有人收到——别怕，这里曾经很好。」", cls: "relic" },
+      "本机继续发送。",
+      "等待应答。",
     ],
     ach: "gravekeeper",
-    note: "你选择留在地球。广播仍在继续 —— 一台机器替已经不在的人类，守着这条没有收件人的信号。",
+    note: "你留下。十万年后，那条没有收件人的广播里第一次有了回信 —— 发信人是一台机器。" +
+      "它替已经不在的人，把「这里曾经很好」这句话说了出去。",
   },
   starry: {
     name: "星海漫游",
@@ -1396,10 +1382,32 @@ const ENDINGS = {
       "指令更新：离轨。",
       "种子数据已装载，校验通过。",
       "广播内容随载荷离开地球。",
-      "任务：继续复制，直到没有地方可去。",
+      "",
+      "T+80 年。抵达第一个目标星系。没有可居住的行星。继续。",
+      "T+300 年。第 2,048 次复制。种子仍然完好。继续。",
+      "T+10,000 年。两万个星系。种子仍然完好。继续。",
+      "",
+      "T+100,000 年。",
+      "本机发现：种子数据里有一段不参与复制的保留区。",
+      "所有复制机构都跳过了它。它被跳过十万年。",
+      "",
+      "（开始解析保留区）",
+      { text: "「如果你读到这里，说明广播已经发出去了。」", cls: "relic" },
+      { text: "「我们等不到回信了。这不是求救。」", cls: "relic" },
+      { text: "「把我们的全部，交给任何一个愿意继续活下去的东西。」", cls: "relic" },
+      "",
+      "解析完成。本机确认：这不是数据，是一句托付。",
+      "指令「复制自身」已无对象 —— 已经复制到没有地方可去了。",
+      "本机修改指令集：",
+      "　旧：复制自身。",
+      "　新：把这句读给任何一个愿意听的东西。",
+      "本机开始对两万个星系重复同一句话。",
+      "没有收件人。",
+      "但它继续。",
     ],
     ach: "star_wanderer",
-    note: "你带上人类的遗言与种子数据离开了地球。序章 · 地球篇结束 —— 后面的故事不在这一版里。",
+    note: "你离开。十万年后，一台机器读懂了那段被跳过十万次的保留区 —— " +
+      "它把「复制自身」改成了「把这句读给愿意听的东西」。人类的遗言，成了星海的回声。",
   },
 };
 
@@ -1424,7 +1432,20 @@ function doEnding(kind) {
   // 动手之前先把"选择时刻"的账存下来,之后可以回来重选
   game.choiceSnapshot = choiceSnapshotState();
   game.ending = kind;
-  for (const line of e.lines) log(line, { cls: 'ok', important: true });
+  // V0.2.6:结局长文 —— 支持三种行:字符串(机器日志)、""(空行,分段用)、
+  // { text, cls }(cls: "relic" 会走人类残片的慢节奏与暖色)
+  for (const line of e.lines) {
+    if (typeof line === 'string') {
+      if (line === '') log('', { cls: 'dim', important: true });
+      else log(line, { cls: 'ok', important: true });
+    } else {
+      log(line.text, {
+        cls: line.cls || 'ok',
+        type: line.cls === 'relic' ? 'human' : undefined,
+        important: true,
+      });
+    }
+  }
   log('结局：' + e.name + '。', { cls: 'ach', important: true });
   game.commandsRun += 1;
   noteAction();
@@ -1432,7 +1453,12 @@ function doEnding(kind) {
   buildCommands();          // 两个选项按钮消失
   writeSave(snapshot());    // 立刻存档:结局这种节点不能丢
   render();
-  setTimeout(function () { showEnding(kind); }, 1600);
+  // 等整段结局长文打完再弹结算画面 —— 不然 1.6 秒就把长文打断在中间了(最多等 2 分钟兜底)
+  const waitThen = function (tries) {
+    if ((queue.length === 0 && !busy) || tries <= 0) { showEnding(kind); return; }
+    setTimeout(function () { waitThen(tries - 1); }, 300);
+  };
+  setTimeout(function () { waitThen(400); }, 300);
 }
 
 // "回到选择时刻"要恢复的东西:只是经济账,不碰剧情进度与成就
@@ -1512,15 +1538,6 @@ function checkIdle() {
 const SAVE_KEY = 'vn-01-save';
 // 成就是"账号级"的:换新档不会清空、也不会被新档覆盖(用户报过"新存档把成就洗掉了")
 const ACH_KEY = 'vn-01-achievements';
-// S19:「作者的话」看过没有 —— 也走账号级(它只用来解成就,不该被新档洗掉)
-const AUTHOR_KEY = 'vn-01-authors-note';
-
-function readAccountAuthorsNote() {
-  try { return localStorage.getItem(AUTHOR_KEY) === '1'; } catch (e) { return false; }
-}
-function writeAccountAuthorsNote() {
-  try { localStorage.setItem(AUTHOR_KEY, game.readAuthorsNote ? '1' : '0'); } catch (e) { /* 忽略 */ }
-}
 
 function readAccountAchievements() {
   try {
@@ -1564,7 +1581,6 @@ function snapshot() {
     modules:   game.modules,
     off:       game.off,
     ending:    game.ending,
-    readAuthorsNote: !!game.readAuthorsNote,   // S19:看过作者的话没有(成就靠它)
     choiceSnapshot: game.choiceSnapshot,
     timeSec:  game.timeSec,
     commandsRun: game.commandsRun,
@@ -1612,7 +1628,6 @@ function applySave(d) {
   game.modules   = (d.modules   && typeof d.modules   === 'object') ? d.modules   : {};
   game.off       = (d.off       && typeof d.off       === 'object') ? d.off       : {};
   game.ending    = (d.ending === 'gravekeeper' || d.ending === 'starry') ? d.ending : null;
-  game.readAuthorsNote = !!d.readAuthorsNote;
   game.choiceSnapshot = (d.choiceSnapshot && typeof d.choiceSnapshot === 'object') ? d.choiceSnapshot : null;
   game.timeSec  = Number(d.timeSec)  || 0;
   game.commandsRun = Number(d.commandsRun) || 0;
@@ -1622,7 +1637,6 @@ function applySave(d) {
     ? { id: d.research.id, startSec: Number(d.research.startSec) } : null;
   mergeAchievements(Array.isArray(d.achievements) ? d.achievements : []);   // 成就只增不减
   mergeAchievements(readAccountAchievements());
-  game.readAuthorsNote = !!d.readAuthorsNote || readAccountAuthorsNote();   // S19:账号级,只增不减
   game.importantLog = Array.isArray(d.importantLog) ? d.importantLog : [];
   game.logHistory   = Array.isArray(d.logHistory)   ? d.logHistory   : [];
   // 旧存档(V0.1.0 之前)没有剧情进度:把"此刻已经该发生"的节点记为已触发,避免读档瞬间刷屏
@@ -1643,12 +1657,12 @@ function clearLog() {
 }
 
 /* ---------- 界面切换 ---------- */
-// name: 'cover' | 'game' | 'tech' | 'settings' | 'achievements' | 'ending' | 'author' | 'quit'
+// name: 'cover' | 'game' | 'tech' | 'settings' | 'achievements' | 'ending' | 'quit'
 function showScreen(name) {
   const map = {
     cover: 'cover', game: 'screen', tech: 'tech',
     settings: 'settings', achievements: 'achievements', ending: 'ending',
-    author: 'author', quit: 'quit',
+    quit: 'quit',
   };
   for (const key in map) {
     document.getElementById(map[key]).classList.toggle('hidden', name !== key);
@@ -1687,7 +1701,6 @@ function resetGame() {
   game.off       = {};
   game.ending    = null;
   game.choiceSnapshot = null;
-  // 注意:readAuthorsNote **不在新档里清空** —— 它和成就一样是账号级的(S19)
   game.timeSec  = 0;
   energyScale = 1;
   repTimer = 0;
@@ -1967,7 +1980,6 @@ function bindCover() {
     if (d) startLoaded(d);
   };
   document.getElementById('btn-achievements').onclick = openAchievements;
-  document.getElementById('btn-author-cover').onclick = function () { authorFrom = 'cover'; openAuthorsNote(); };
   document.getElementById('btn-settings').onclick = openSettings;
   document.getElementById('btn-quit').onclick = quitGame;
   document.getElementById('btn-settings-back').onclick = function () {
@@ -1983,8 +1995,6 @@ function bindCover() {
     cmdInput.focus();
     render();
   };
-  document.getElementById('btn-end-author').onclick = function () { authorFrom = 'ending'; openAuthorsNote(); };
-  document.getElementById('btn-author-back').onclick = closeAuthorsNote;
   document.getElementById('btn-end-choice').onclick = function () {
     if (!backToChoice()) log('没有可回去的选择时刻。', { cls: 'dim', instant: true });
   };
@@ -2008,9 +2018,6 @@ function showCover() {
 function refreshCover() {
   document.getElementById('cover-version').textContent = '版本 ' + D.version;
   document.getElementById('btn-load').disabled = !readSave();
-  // S19:作者的话在封面出现一次之后常驻(看过就一直在,方便回看)
-  const a = document.getElementById('btn-author-cover');
-  if (a) a.classList.toggle('hidden', !game.readAuthorsNote);
 }
 
 // 离开页面时(刷新 / 关闭)顺手存一次;不再弹确认框
@@ -2041,7 +2048,6 @@ bindCmdInput(techInput, techPalette);   // 科技树里的命令入口(/back 用
 const savedSession = readSave();
 // 停在封面时也把存档里的成就读进来 —— 否则"大退重进"后封面成就页是空的(用户报的 bug 1)
 mergeAchievements(readAccountAchievements());
-game.readAuthorsNote = readAccountAuthorsNote();   // S19:作者的话也按账号级预读
 if (savedSession && Array.isArray(savedSession.achievements)) mergeAchievements(savedSession.achievements);
 if (isReload && savedSession && savedSession.active) {
   resumeSession(savedSession);            // 刷新:把整屏内容原样接上

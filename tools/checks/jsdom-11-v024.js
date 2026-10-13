@@ -88,28 +88,16 @@ function run() {
       ok('重复停用会提示"已经是停用状态"',
         await (async function () { for (let i = 0; i < 20; i++) { if (lines().some((l) => l.indexOf('已经是停用状态') >= 0)) return true; await sleep(100); } return false; })());
 
-      console.log('\n【3. 作者的话(接口)】');
-      ok('数据表里有 authorsNote 与正文行', peek('D.authorsNote && Array.isArray(D.authorsNote.lines) && D.authorsNote.lines.length > 0'),
-        String(peek('D.authorsNote.lines.length')));
-      ok('开局时封面上的 [ 作者的话 ] 是隐藏的', hidden('btn-author-cover'));
-      // 从结局结算页打开
-      peek('game.fired.push("e1"); doEnding("gravekeeper");');
-      await sleep(1800);   // 结局文字先打字打完,1.6 秒后才弹结算画面
-      ok('结算画面出现', !hidden('ending'));
-      ok('结算画面有 [ 作者的话 ] 按钮', !!doc.getElementById('btn-end-author'));
-      doc.getElementById('btn-end-author').click();
-      await sleep(300);
-      ok('作者的话页面打开了', !hidden('author') && hidden('ending'));
-      ok('页面正文来自 data 表(不是空的)',
-        doc.getElementById('author-body').textContent.indexOf(peek('D.authorsNote.lines[0].text')) >= 0,
-        doc.getElementById('author-body').textContent.slice(0, 40));
-      ok('打开过就记下 readAuthorsNote', peek('game.readAuthorsNote') === true);
-      ok('账号级存储也写了', (w.localStorage.getItem('vn-01-authors-note') || '') === '1');
-      const gotAch = await (async function () { for (let i = 0; i < 30; i++) { if (peek('game.achievements').indexOf('authors_note') >= 0) return true; await sleep(100); } return false; })();
-      ok('成就「作者的话」解锁', gotAch, JSON.stringify(peek('game.achievements')));
-      pressKey(doc, 'Escape');
-      await sleep(300);
-      ok('Esc 关掉后回到结算画面', hidden('author') && !hidden('ending'));
+      console.log('\n【3. 「作者的话」已彻底移除(V0.2.6)】');
+      ok('数据表里没有 authorsNote 了', peek('typeof D.authorsNote') === 'undefined', String(peek('typeof D.authorsNote')));
+      ok('成就表里没有 authors_note 了',
+        peek('D.achievements.every(function(a){return a.id !== "authors_note";})'));
+      ok('成就总数是 9', peek('D.achievements.length') === 9, String(peek('D.achievements.length')));
+      ok('封面上没有 [ 作者的话 ] 按钮', !doc.getElementById('btn-author-cover'));
+      ok('结算画面上没有 [ 作者的话 ] 按钮', !doc.getElementById('btn-end-author'));
+      ok('没有 #author 这一屏', !doc.getElementById('author'));
+      ok('game 状态里没有 readAuthorsNote', peek('typeof game.readAuthorsNote') === 'undefined');
+      ok('相关函数也删了', peek('typeof openAuthorsNote') === 'undefined' && peek('typeof closeAuthorsNote') === 'undefined');
 
       console.log('\n【4. S19 长按加速】');
       ok('初始不是长按', peek('longPress') === false);
@@ -120,19 +108,23 @@ function run() {
       await sleep(150);
       ok('松开后退出长按', peek('longPress') === false);
 
-      console.log('\n【3b. 星海漫游结局也要有作者的话入口】');
-      peek('game.ending = null; game.unlocked.push("starship");');
-      peek('doEnding("starry")');
-      await sleep(1800);   // 结局文字打完 → 1.6 秒后弹结算画面
-      ok('星海漫游的结算画面出现', !hidden('ending'));
-      ok('结算画面里有可点的 [ 作者的话 ]',
-        !!doc.getElementById('btn-end-author') && !doc.getElementById('btn-end-author').disabled);
-      doc.getElementById('btn-end-author').click();
-      await sleep(300);
-      ok('从星海漫游也能打开作者的话', !hidden('author'));
-      pressKey(doc, 'Escape');
-      await sleep(300);
-      ok('关掉后回到结算画面', hidden('author') && !hidden('ending'));
+      console.log('\n【3b. 结局是一段长文,而且打完才弹结算画面(V0.2.6)】');
+      ok('守墓人结局有长文(>= 15 行)', peek('ENDINGS.gravekeeper.lines.length') >= 15,
+        String(peek('ENDINGS.gravekeeper.lines.length')));
+      ok('星海漫游结局有长文(>= 20 行)', peek('ENDINGS.starry.lines.length') >= 20,
+        String(peek('ENDINGS.starry.lines.length')));
+      ok('长文里有暖色(人类)的段落', peek('ENDINGS.starry.lines.some(function(l){return l && l.cls === "relic";})'));
+      const beforeEnd = lines().length;
+      // e1(回声塔)是结局的前置;测试里直接补上,再选 /go
+      peek('if (game.fired.indexOf("e1") < 0) game.fired.push("e1");' +
+        'game.ending = null; game.unlocked.push("starship"); doEnding("starry");');
+      await sleep(800);
+      ok('刚选完结局时结算画面**还没有**弹出来(长文正在打)', hidden('ending'));
+      await (async function () { for (let i = 0; i < 80; i++) { if (!hidden('ending')) return; await sleep(300); } })();
+      ok('长文打完后结算画面才出现', !hidden('ending'));
+      ok('终端里真的打出了长文(新行 >= 20)', lines().length - beforeEnd >= 20, String(lines().length - beforeEnd));
+      ok('长文里能看到最后那句改写指令', lines().some((l) => l.indexOf('新：把这句读给任何一个愿意听的东西') >= 0),
+        lines().slice(-3).join(' | '));
 
       console.log('\n【7. 音频:三个素材都在,接口按音量工作】');
       ok('音频接口有 playSfx / playMusic / stopMusic',

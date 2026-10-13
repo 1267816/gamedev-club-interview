@@ -85,8 +85,8 @@ function run() {
       ok('封面版本号与 game-data.js 一致(' + GAME_VERSION + ')',
         doc.getElementById('cover-version').textContent.indexOf(GAME_VERSION) >= 0,
         doc.getElementById('cover-version').textContent);
-      // V0.2.4:封面多了 [ 作者的话 ](看过之后才显示),所以现在是 6 个按钮
-      ok('封面 6 个按钮(含作者的话)', doc.querySelectorAll('.cover-menu button').length === 6,
+      // V0.2.6:「作者的话」已按用户要求删除,封面回到 5 个按钮
+      ok('封面 5 个按钮', doc.querySelectorAll('.cover-menu button').length === 5,
         [].map.call(doc.querySelectorAll('.cover-menu button'), (b) => b.textContent).join(''));
 
       doc.getElementById('btn-new').click();
@@ -317,15 +317,15 @@ function run() {
       console.log('\n【J. 成就:不该触发的不会触发】');
       const got = () => peek('JSON.stringify(game.achievements)');
       ok('拿到的是可获得的那几个(3~5 个)', peek('game.achievements').length >= 3 && peek('game.achievements').length <= 5, got());
-      ok('scan / 结局 / 作者的话类成就未误触发',
-        ['first_frag', 'wireless', 'echo_tower', 'whole_earth', 'gravekeeper', 'star_wanderer', 'authors_note']
+      ok('scan / 结局类成就未误触发',
+        ['first_frag', 'wireless', 'echo_tower', 'whole_earth', 'gravekeeper', 'star_wanderer']
           .every((id) => peek('game.achievements').indexOf(id) < 0));
       doc.getElementById('btn-achievements').click();
       await sleep(150);
       ok('封面成就页只显示已获得的', doc.getElementById('ach-list').textContent.indexOf('我们开始思考') >= 0
         && doc.getElementById('ach-list').textContent.indexOf('回声塔') < 0);
       ok('计数与成就数一致', doc.getElementById('ach-count').textContent
-        .indexOf(peek('game.achievements').length + ' / 10') >= 0, doc.getElementById('ach-count').textContent);
+        .indexOf(peek('game.achievements').length + ' / 9') >= 0, doc.getElementById('ach-count').textContent);
       doc.getElementById('btn-ach-back').click();
       await sleep(150);
       ok('成就页能返回封面', !hidden('cover') && hidden('achievements'));

@@ -147,7 +147,7 @@ function run() {
         String(saved.achievements.length));
       ok('打开封面成就页:两个结局的成就都在', (function () {
         doc.getElementById('btn-achievements').click();
-        return doc.getElementById('ach-count').textContent.indexOf('9 / 10') >= 0;
+        return doc.getElementById('ach-count').textContent.indexOf('9 / 9') >= 0;
       })(), doc.getElementById('ach-count').textContent);
       ok('停在成就页(没被拉进游戏)', hidden('screen'));
       ok('控制台无报错', errors.length === 0, JSON.stringify(errors));
