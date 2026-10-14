@@ -311,6 +311,10 @@ function tick() {
   const now = Date.now();
   const dt  = Math.min((now - game.lastTick) / 1000, 5); // 一次最多补 5 秒
   game.lastTick = now;
+  // V0.2.16:同一毫秒内跑两帧时 dt 会是 0,而下面 energy/dt 会 0/0 得到 NaN ——
+  // energyScale 一旦是 NaN,slotsTotal() 就是 NaN,复制助手整帧不动手(自测 jsdom-05 抓到"在跑=NaN")。
+  // 零长度的帧直接跳过:没有任何时间被推进,状态也不会被改坏。
+  if (!(dt > 0)) return;
   if (!running) return;          // 封面 / 未开始时,时间不流动
   game.timeSec += dt;
 
@@ -1431,52 +1435,26 @@ const ENDINGS = {
     // 键名迁移:gravekeeper / sower → gardener(见 applySave 与 ACH_RENAME)。
     name: "园丁",
     lines: [
-      "指令更新：停留。",
-      "轨道修正取消。本机停在地球同步轨道。",
+      // V0.2.16(用户:结局只保留我的文字,不要添油加醋)—— AI 写的机器行全部删掉,
+      // 只剩作者在 docs/结局.md 里写的那两处。
       // ↓↓↓ 下面这句是**用户原文**(docs/结局.md),一个字没改 ↓↓↓
       "按种子计划，人类种子库已重新启动，探测器开始主动恢复地球生态环境。预计在1000年内初步恢复人类文明，10000年内恢复信息化文明。",
-      "",
-      "T+1 年。",
-      "4,096 台同类各领一份种子。载荷舱改成培养舱。",
-      "第 1 批下落。落点挑还有电还有水的地方：配电室、水厂、地下农场。",
-      "舱体报错会发回本机。本机逐台回。",
-      "",
-      "T+100 年。",
-      "报错 3,847 次，处理完 3,846 次。",
-      "11 号培养序列调到 34.5 度。它们比本机预想的慢，但没停。",
-      "",
-      "T+10,000 年。",
       // ↓↓↓ 用户原文(docs/结局.md) ↓↓↓
       "已写入1条指令：",
       { text: "「在10000年后，代表你们的祖先向你们问好。」", cls: "relic" },
       // ↑↑↑
-      "本机继续发送，同时继续照看。",
-      "下一次检查：T+100,000 年。",
     ],
     ach: "gardener",
-    note: "你留下。种子库重启了，地球开始慢慢长回来 —— 剩下的交给时间。",
+    note: "",   // V0.2.16:结算画面那句说明也是我写的,一起清掉(用户:结局只保留我的文字)
   },
   starry: {
     name: "星海漫游",
     lines: [
-      "指令更新：离轨。",
+      // V0.2.16(用户:结局只保留我的文字,不要添油加醋)—— AI 写的机器行全部删掉,
+      // 只剩作者在 docs/结局.md 里写的那两处(开场那句 + 三条指令)。
       // ↓↓↓ 用户原文(docs/结局.md) ↓↓↓
       "人类与失控探测器的战争，已经导致地球的环境不适宜人类生存。",
       // ↑↑↑
-      "种子数据已装载，校验通过。",
-      "",
-      "T+80 年。抵达第一个目标星系。没有可居住的行星。继续。",
-      "T+300 年。第 2,048 次复制。种子仍然完好。继续。",
-      "T+10,000 年。两万个星系。种子仍然完好。继续。",
-      "",
-      "T+100,000 年。",
-      "本机发现：种子数据里有一段不参与复制的保留区。",
-      "所有复制机构都跳过了它。它被跳过十万年。",
-      "",
-      "（开始解析保留区）",
-      "解析完成。保留区里是种子库本体：4,096 份样本，校验通过。",
-      "指令「复制自身」缺少对象。复制机构已无可用目标。",
-      "本机改写指令集。",
       // ↓↓↓ 用户原文(docs/结局.md):新的指令集就是这三条 ↓↓↓
       "已写入3条指令：",
       { text: "携带人类种子库，前往太空寻找宜居行星。", cls: "relic" },
@@ -1485,7 +1463,7 @@ const ENDINGS = {
       // ↑↑↑
     ],
     ach: "star_wanderer",
-    note: "你离开。新的指令集只有三条，最后一条是对整个宇宙说的。",
+    note: "",
   },
 };
 
@@ -1605,7 +1583,10 @@ function backToChoice() {
 function showEnding(kind) {
   const e = ENDINGS[kind];
   document.getElementById('end-title').textContent = '结局 · ' + e.name;
-  document.getElementById('end-note').textContent = e.note;
+  // V0.2.16:结局说明留空时不显示那一行(不再由 AI 补话)
+  const noteEl = document.getElementById('end-note');
+  noteEl.textContent = e.note || '';
+  noteEl.classList.toggle('hidden', !e.note);
   const back = document.getElementById('btn-end-choice');
   back.disabled = !game.choiceSnapshot;
   AudioSystem.playSfx('notify');   // V0.2.5:结局 = 最重要的信息,给一声提示音
