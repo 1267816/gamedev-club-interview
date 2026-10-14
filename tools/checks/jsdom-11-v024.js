@@ -123,7 +123,10 @@ function run() {
       await (async function () { for (let i = 0; i < 80; i++) { if (!hidden('ending')) return; await sleep(300); } })();
       ok('长文打完后结算画面才出现', !hidden('ending'));
       ok('终端里真的打出了长文(新行 >= 20)', lines().length - beforeEnd >= 20, String(lines().length - beforeEnd));
-      ok('长文里能看到最后那句改写指令', lines().some((l) => l.indexOf('新：把这句读给任何一个愿意听的东西') >= 0),
+      // V0.2.11:结局长文按"去 AI 味"重写过 —— 断言跟着改成新的那种写法
+      // (旧句「新：把这句读给任何一个愿意听的东西」属于"替机器抒情 + 对称收尾",已删)
+      ok('长文里能看到最后那句改写指令', lines().some((l) => l.indexOf('本机改写指令集') >= 0)
+        && lines().some((l) => l.indexOf('发送中。') >= 0),
         lines().slice(-3).join(' | '));
 
       console.log('\n【7. 音频:三个素材都在,接口按音量工作】');
