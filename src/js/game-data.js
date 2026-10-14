@@ -8,7 +8,7 @@ const GAME_DATA = {
   title: "VN-CommandLineSystem 自复制探测器命令行系统",
 
   // 游戏版本号(与 plan.md / test_datalog.md 的版本保持一致)
-  version: "V0.2.8",
+  version: "V0.2.9",
 
   // 数值:全部集中在这里,方便"一次只调一样"
   numbers: {
@@ -90,7 +90,9 @@ const GAME_DATA = {
   //   scanReq   需要探测进度先到这个百分比(0~100),否则显示"锁定";用来把科技线和探测线咬在一起
   //             (不写 = 没有扫描门槛)
   techs: [
-    { id: "click_mine", name: "简单采集", cat: "操作", cost: { material: 40 }, requires: [], research: 12,
+    // V0.2.9(审查报告 S3-7):40 → 25。开局只有 1 台探测器(0.5 材料/秒),
+    // 原来第一项科技要玩家"点 40 次 /mine"或干等 80 秒,是整局手感最差的一分钟。
+    { id: "click_mine", name: "简单采集", cat: "操作", cost: { material: 25 }, requires: [], research: 12,
       unlockCommand: "mine", effect: "解锁 /mine 的点击按钮",
       desc: "把采集流程固化成一个可反复调用的例程。" },
     { id: "click_rep", name: "批量复制", cat: "操作", cost: { material: 140 }, requires: ["click_mine"], research: 12,
@@ -117,16 +119,21 @@ const GAME_DATA = {
     { id: "probe_eff", name: "采集优化", cat: "产量", cost: { data: 14 }, requires: ["autorep"], research: 12, scanReq: 35,
       effect: "每台探测器产出 ×1.5",
       desc: "优化采集工作流，增加产出。" },
-    { id: "core_eff", name: "并行调度", cat: "软件", cost: { data: 22 }, requires: ["probe_eff"], research: 12, scanReq: 45,
+    // V0.2.9(审查报告 S2-5):原来 14 项科技 requirements 首尾相接 = 一条直线,研究顺序被锁死。
+    // 这里断开两处,形成两条真正的并行支线(不改任何数值,只改前置):
+    //   支线 A(scanReq 35 / 45):采集优化(产量) ∥ 并行调度(算力)
+    //   支线 B(scanReq 55 / 65):语义重构(解析) ∥ 聚变改良(能源)
+    // 两条支线都要做完才能研究「递归自举」——玩家第一次有了"先点哪个"的选择。
+    { id: "core_eff", name: "并行调度", cat: "软件", cost: { data: 22 }, requires: ["autorep"], research: 12, scanReq: 45,
       effect: "每核心算力槽 ×2，耗能 ×0.8",
       desc: "让核心能够同时跑两条指令流，而且更省电。" },
     { id: "decode_eff", name: "语义重构", cat: "解析", cost: { data: 32 }, requires: ["core_eff"], research: 12, scanReq: 55,
       effect: "解析速率 ×1.6",
       desc: "不再逐字解析，而是猜整段的意思。" },
-    { id: "fusion", name: "聚变改良", cat: "能源", cost: { data: 47 }, requires: ["decode_eff"], research: 12, scanReq: 65,
+    { id: "fusion", name: "聚变改良", cat: "能源", cost: { data: 47 }, requires: ["core_eff"], research: 12, scanReq: 65,
       effect: "反应堆输出 ×1.6",
       desc: "使用改良的聚变技术。" },
-    { id: "bootstrap", name: "递归自举", cat: "产量", cost: { data: 72 }, requires: ["fusion"], research: 12, scanReq: 72,
+    { id: "bootstrap", name: "递归自举", cat: "产量", cost: { data: 72 }, requires: ["decode_eff", "fusion"], research: 12, scanReq: 72,
       effect: "每台探测器产出 ×2（累计 ×3)",
       desc: "复制机构开始复制自己的复制机构。" },
     { id: "starship", name: "星际航行", cat: "结局", cost: { data: 102 }, requires: ["bootstrap"], research: 12, scanReq: 75,
@@ -178,8 +185,10 @@ const GAME_DATA = {
     {
       id:           "replicate",
       label:        "/replicate",
-      hint:         "消耗 10 材料，复制一个探测器",
-      costMaterial: 10,
+      // V0.2.9(审查报告 S2-2 / S3-11):这里原来写死 costMaterial: 10 与"消耗 10 材料",
+      // 而真实成本是几何增长的 —— 按钮的可用状态曾据此判断,中后期会骗人。
+      // 文案与成本现在都由 game.js 的 commandHint() / probeCost() 现算,这里不再留数字。
+      hint:         "",
       group:        "replicate",
       clickable:    false,    // 点击功能以后由科技树解锁
     },
@@ -305,10 +314,13 @@ const GAME_DATA = {
       id: "p3",
       when: { after: "p2" },
       lines: [
-        { text: "[附加数据 · 残片 001]", cls: "relic" },
+        // V0.2.9(审查报告 S1-2 / S3-10):这一段原来是"遗嘱"全文,与星海漫游结局里
+        // "保留区"那三句几乎逐字相同 —— 等于开局第二分钟就把结局的揭示剧透掉了。
+        // 现在只留碎片(两处"数据缺失"),完整的三句只留在结局里;顺便补上"位置"(与 002/003/004 一致)。
+        { text: "[附加数据 · 残片 001 · 位置：外围中继站]", cls: "relic" },
         { text: "「……如果你读到这里，说明广播已经发出去了。」", cls: "relic" },
-        { text: "「我们等不到回信了。这不是求救——发信的人已经不在了。」", cls: "relic" },
-        { text: "「把我们的全部，交给任何一个愿意继续活下去的东西。」", cls: "relic" },
+        { text: "「我们等不到回信了。这不是求救——」（此处数据缺失）", cls: "relic" },
+        { text: "「把我们的全部，交给任何一个愿意继续活下去的——」（此处数据缺失）", cls: "relic" },
       ],
     },
     {
@@ -389,7 +401,9 @@ const GAME_DATA = {
         { text: "[附加数据 · 残片 003 · 位置：C-7 机房]", cls: "relic" },
         { text: "「第 61 天。哭声停了。我们不再计数。」", cls: "relic" },
         { text: "「上面把密钥交下来，只说了一句：清干净。」", cls: "relic" },
-        { text: "「我到今天才想明白，'清干净'说的是谁。（此处数据缺失）」", cls: "relic" },
+        // V0.2.9(审查报告 S3-1 / S4-2):定稿世界观是"密钥清除的是失控的复制机",
+        // 原来那句"清干净说的是谁"按字面读像是清理人类自己(与设定打架);顺便改全角引号。
+        { text: "「我到今天才想明白，要清干净的是什么——是我们造出来的东西。（此处数据缺失）」", cls: "relic" },
         { text: "数据缺失。无法补全。" },
       ],
     },
@@ -441,8 +455,12 @@ const GAME_DATA = {
         { text: "发信者记录显示：地球系统在最后一名操作者死亡后，仍按指令持续广播。" },
         { text: "结论：信号没有收件人。" },
         { text: "原始指令「复制自身」已完成语义闭环。需要操作者决定下一步。" },
-        { text: "可执行指令： /stay 留在地球，作为守墓人。" },
-        { text: "　　　　　　　　/go   带上传续的种子数据，前往太空。" },
+        // V0.2.9(审查报告 S1-3):75% 就开放结局,而 88% / 100% 的记录排在它后面 ——
+        // 直接选掉就会整段错过。这里在"选择"之前先把这件事说清楚(机器口吻,不跳出设定)。
+        { text: "提示：地表仍有未扫描区域。现在做出决定，扫描与记录将终止。" },
+        { text: "可执行指令：/stay 留在地球，作为守墓人。" },
+        // 审查报告 S4-2 / S4-3:错字"传续"→"延续";不再用全角空格硬凑对齐。
+        { text: "可执行指令：/go 带上延续的种子数据，前往太空。" },
       ],
     },
   ],

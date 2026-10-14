@@ -24,6 +24,10 @@
        加 `--research-idle` 可切回"研究期间干等"的旧模型,用来对比两种玩家
      · 研究进行中探测提速 ×P.scanResearchMul(让玩家愿意留在终端看进度)
 
+   V0.2.9(审查报告 S1-1):玩家模型默认**会装一台「复制助手」**(与游戏里引导的一致);
+     加 `--no-rep` 走"从不安装复制助手"的旧模型 —— 两条时间线要一起看,
+     因为 V0.2.9 之前文档里所有节奏结论都只来自后者。
+
    改参数:只改下面的 P(数值)与 TECHS(科技)与 BEATS(剧情节点)。
    命令行:node tools/economy-sim.js [scanK] [买探测器的门槛倍数] [--research-idle] [--curve 阈值表]
    验收口径(2026-10-12 V0.2.0 复核:两个模型都通过):
@@ -81,7 +85,7 @@ const TECHS = [
   // research = 研究秒数(V0.2.0);scanReq = 需要探测先到这个百分比(V0.2.0 的扫描闸门)
   // V0.2.7:研究时长改成**固定的 12 秒**(原来 10+3n 线性增长 → 后期全在等研究);
   //         探测门槛抬高,让"探测进度"真正成为节奏的把手,而不是形同虚设。
-  { id: 'click_mine', cost: { material: 40 },  research: 12 },
+  { id: 'click_mine', cost: { material: 25 },  research: 12 },   // V0.2.9:40 → 25(开局那一分钟太闲)
   { id: 'click_rep',  cost: { material: 140 }, research: 12 },
   { id: 'reactor',    cost: { material: 320 }, research: 12 },
   { id: 'core',       cost: { material: 620 }, research: 12 },
@@ -241,6 +245,14 @@ function decide(s, ph) {
   }
   // 买探测器的门槛:材料要比成本高出一截才动手(留钱给科技)。命令行第 3 个参数可覆盖,
   // 用来模拟"省着买"与"使劲买"两类玩家(V0.2.0 调探测节奏时用的)
+  // V0.2.9(审查报告 S1-1):补上「复制助手」—— 原来这个模型**从不安装**它,
+  // 而游戏里"自主复制"科技与引导提示都在推玩家装。加 `--no-rep` 可切回旧模型做对比。
+  if (s.hasRep && s.reps < 1 && free > 0 && s.material >= repCost(s.reps)
+      && process.argv.indexOf('--no-rep') < 0) {
+    s.material -= repCost(s.reps); s.reps += 1;
+    s.log.push([s.t, 'mod', 'rep' + s.reps]);
+    return;
+  }
   const buyMul = Number.isFinite(Number(process.argv[4])) ? Number(process.argv[4]) : 1.8;
   if (s.material > probeCost(s.probes - 1) * buyMul && s.material >= probeCost(s.probes - 1)) {
     s.material -= probeCost(s.probes - 1); s.probes += 1;
@@ -263,7 +275,7 @@ function run() {
     if (!s.scanAt[step]) s.scanAt[step] = s.t;
     if (s.t >= nextSnap) {
       s.snap[Math.round(nextSnap)] = {
-        mat: s.material, cap: ph.cap, rate: ph.matRate, probes: s.probes, wh: s.warehouses,
+       mat: s.material, cap: ph.cap, rate: ph.matRate, probes: s.probes, wh: s.warehouses, reps: s.reps,
         scan: s.scan, data: s.data, slots: ph.slots, drones: s.drones, decoders: s.decoders,
       };
       nextSnap += 60;
@@ -328,7 +340,7 @@ for (const b of BEATS) {
 }
 console.log('  最大空窗 = ' + maxGap.toFixed(0) + ' s (' + mmss(maxGap) + '),出现在 ' + maxPair +
   '  →  ' + (maxGap <= 180 ? '通过' : '超标!'));
-console.log('\n【逐分钟快照】 分 | 材料/上限 速率 | 探 | 仓库 | 探测% | 数据 | 槽 | 采/解');
+console.log('\n【逐分钟快照】 分 | 材料/上限 速率 | 探 | 仓库 | 探测% | 数据 | 槽 | 采/解/复');
 for (let k = 60; k <= 1020; k += 60) {
   const x = s.snap[k];
   if (!x) continue;
@@ -336,5 +348,5 @@ for (let k = 60; k <= 1020; k += 60) {
     (x.mat.toFixed(0) + '/' + x.cap.toFixed(0)).padEnd(13) + x.rate.toFixed(1).padStart(6) + ' | ' +
     String(x.probes).padStart(2) + ' | ' + String(x.wh).padStart(3) + '  | ' +
     x.scan.toFixed(1).padStart(5) + ' | ' + x.data.toFixed(1).padStart(6) + ' | ' +
-    String(x.slots).padStart(2) + ' | ' + x.drones + '/' + x.decoders);
+    String(x.slots).padStart(2) + ' | ' + x.drones + '/' + x.decoders + '/' + (x.reps || 0));
 }

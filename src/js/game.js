@@ -48,6 +48,9 @@ function checkLongPress() {
     longPress = true;
   }
 }
+// V0.2.9:窗口失焦时浏览器不会补发 keyup → 长按状态会永久卡住(之后所有文字 6 倍速)。
+// 失焦一律复位,顺便把计时器清掉。
+window.addEventListener('blur', pressUp);
 
 // V0.2.0:科技树里"终端有新消息"的提示。
 // 值为"从这一秒起终端有新消息"(null = 没有)。回来会让它清空 —— 见 markStoryPending / clearStoryPending。
@@ -152,6 +155,13 @@ function T(text) {
   return '?'.repeat(Array.from(text).length);
 }
 
+// V0.2.9:数据表里的文案会被拼进 innerHTML 与属性 —— 文案里出现引号 / 尖括号就会撞坏结构
+// (审查报告 S3-4)。所有来自数据表的文本统一过这两个函数。
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function escAttr(s) { return escHtml(s).replace(/"/g, '&quot;'); }
+
 /* ---------- 2. 日志:排队,一行一行打字打出 ---------- */
 const logEl = document.getElementById('log');
 const queue = [];
@@ -160,7 +170,7 @@ let skip  = false;   // 玩家点击后,当前行立刻显示完
 let activeTimer = null;   // 当前正在打字的那一行的定时器
 let lastLine = null;      // 最近一行:{ el, base, count, group } —— 用于重复操作折叠
 
-// opts: { cls, instant, revealAll, group, important }
+// opts: { cls, instant, revealAll, group, important, noSkip }
 function log(text, opts) {
   opts = opts || {};
 
@@ -196,6 +206,7 @@ function log(text, opts) {
     revealAll: opts.revealAll,
     group: opts.group,
     important: opts.important,
+    noSkip: opts.noSkip,   // V0.2.9:结局长文不许被"点一下跳过"整段吃掉(审查报告 S3-12)
     type: opts.type,   // S21:human = 人类残片(打得更慢),machine / boot = 快(默认)
   });
   pump();
@@ -256,7 +267,7 @@ function pump() {
     return d.default || 12;
   };
   const step = function () {
-    if (skip) i = chars.length;
+    if (skip && !item.noSkip) i = chars.length;
     else { i += (longPress ? 6 : 1); AudioSystem.playSfx('key'); }   // V0.2.5:打字机按键声(内部自己限流)
     line.textContent = chars.slice(0, i).join('');
     logEl.scrollTop = logEl.scrollHeight;
@@ -425,12 +436,16 @@ function render() {
   // 这一块现在终端与科技树共用(render 时写进两个容器)
   const rows = [];
   const row = function (label, value, hintKey, warn) {
-    rows.push('<div class="row' + (warn ? ' warn' : '') + '" data-hint="' + D.panelHints[hintKey] + '"><span>'
-      + T(label) + '</span><b>' + T(value) + '</b></div>');
+    rows.push('<div class="row' + (warn ? ' warn' : '') + '" data-hint="' + escAttr(D.panelHints[hintKey]) + '"><span>'
+      + escHtml(T(label)) + '</span><b>' + escHtml(T(value)) + '</b></div>');
   };
 
   // 仓库满了就把这行标红:否则玩家会盯着满仓材料不知道"最高只能攒这么多"
-  row('材料', fmtNum(game.material) + ' / ' + fmtNum(matCap()), 'material', game.material >= matCap() - 0.01);
+  // V0.2.9(审查报告 S2-4):满仓时的浪费量原来是隐形的 —— 现在直接把"每秒浪费多少"写出来
+  const matFull = game.material >= matCap() - 0.01;
+  const wasted = matFull ? matRate() : 0;
+  row('材料', fmtNum(game.material) + ' / ' + fmtNum(matCap())
+    + (wasted > 0 ? '（浪费 ' + fmtNum(wasted) + '/秒）' : ''), 'material', matFull);
   row('探测', game.scan.toFixed(1) + '%', 'scan');
   const filled = Math.round(Math.min(1, game.scan / 100) * 12);
   rows.push('<div class="bar">' + T('█'.repeat(filled) + '░'.repeat(12 - filled)) + '</div>');
@@ -448,7 +463,11 @@ function render() {
     const over = slotsUsed() > total;
     row('算力', slotsUsed() + ' / ' + total + ' 槽' + (over ? '（超载！)' : ''), 'compute', over);
   }
-  if (has('decode')) row('数据', fmtNum(game.data) + '(+' + dataRate().toFixed(2) + '/s)', 'data');
+  // V0.2.9(S2-4):全科技解锁后数据不再有出口 —— 明说,别让玩家对着涨不完的数字发呆
+  if (has('decode')) {
+    row('数据', fmtNum(game.data) + '(+' + dataRate().toFixed(2) + '/s)'
+      + (game.unlocked.length >= D.techs.length ? ' —— 已无待研究项目' : ''), 'data');
+  }
   // V0.2.0:研究进行中就常驻一行进度 —— 玩家留在终端的主要原因就是看着它走
   const rt = researching();
   if (rt) {
@@ -463,9 +482,11 @@ function render() {
   // 命令按钮的可用状态
   for (const c of D.commands) {
     const btn = document.getElementById('btn-' + c.id);
-    if (btn && c.costMaterial != null) {
-      btn.disabled = game.material < c.costMaterial;
-    }
+    if (!btn) continue;
+    // V0.2.9:复制成本的可用状态必须现算 —— 原来读的是数据表里写死的 costMaterial:10,
+    // 中后期成本涨到几百时按钮还是亮的,点下去只报"材料不足"(审查报告 S2-2)
+    if (c.id === 'replicate') { btn.disabled = game.material < probeCost(); continue; }
+    if (c.costMaterial != null) btn.disabled = game.material < c.costMaterial;
   }
 
   paintHint();   // 引导提示随进度变化
@@ -494,6 +515,9 @@ function storyReady(when) {
 // 扫一遍剧情表:新满足的节点按表内顺序打出来;一次可以连着触发多个(如 p2 → p3 → p4)
 // 返回:这一遍有没有真的打出新内容(V0.2.0:科技树要用它判断"终端有新消息")
 function checkStory() {
+  // V0.2.9:选过结局之后不再推进剧情 —— 否则会出现"已经离开十万年,终端还在打覆盖 88%"的
+  // 自相矛盾(审查报告 S1-3)。回到选择时刻 / 开新档会清掉 ending,剧情随之恢复。
+  if (game.ending) return false;
   let again = true;
   let guard = 0;
   let firedAny = false;
@@ -760,6 +784,11 @@ function runCommand(id) {
         game.off.rep = wantOff;
         log('> ' + (wantOff ? '停用' : '启用') + ' 复制助手' + (wantOff ? '（不再自动复制）' : ''),
           { cls: 'cmd', instant: true, important: true });
+        // V0.2.9:启用时如果压根没有可用算力槽,日志说"已启用"会让人以为它在跑(审查报告 S3-9)
+        if (!wantOff && slotsFor('rep') === 0) {
+          log('注意：当前没有可用算力槽，复制助手不会运行 —— 先造「计算核心」，或停用别的模块。',
+            { cls: 'err', instant: true, group: 'lowpower' });
+        }
         keepSelectionOn('rep', 'module');   // 此刻若正开着科技树,让选中项停在它上面
         if (techVisible) renderTech();
       }
@@ -1050,14 +1079,24 @@ function renderTechDetail() {
     ? '<div class="d-line d-research">研究中：'
       + Math.round(researchProgress(techOf(node.id)) * 100) + '%　剩 ' + researchLeft(techOf(node.id)) + ' 秒</div>'
     : '';
+  // V0.2.9:建造前把"建成后的净功率"写出来 —— 能量上限只有 25/反应堆,
+  // 一次多建几个核心会当场把算力打到 0 再慢慢爬回来(审查报告 S3-6)
+  const netAfter = energyGross() - energyNeed()
+    - (node.id === 'core' ? D.numbers.coreDrain * effects().drainMul : 0);
+  const powerLine = (node.kind === 'building' && has('reactor'))
+    ? '<div class="d-line">净功率：' + netAfter.toFixed(1) + '/s'
+      + (node.id === 'core' ? '（建成后）' : '')
+      + (netAfter < 0 ? ' —— 为负，算力会按可用功率降速' : '') + '</div>'
+    : '';
   techDetailEl.innerHTML =
-      '<div class="d-line"><span class="d-name">' + node.name + '</span> · ' + node.cat + ' · '
-      + statusLabelOf(node) + built + (done ? '' : ' · ' + costText(nodeCost(node))
+      '<div class="d-line"><span class="d-name">' + escHtml(node.name) + '</span> · ' + escHtml(node.cat) + ' · '
+      + escHtml(statusLabelOf(node)) + built + (done ? '' : ' · ' + escHtml(costText(nodeCost(node)))
         + (node.kind === 'tech' && node.research ? ' · 研究 ' + node.research + ' 秒' : '')) + '</div>'
-    + '<div class="d-line">效果：' + effectTextOf(node) + '</div>'
-    + '<div class="d-line">' + descTextOf(node) + '</div>'
+    + '<div class="d-line">效果：' + escHtml(effectTextOf(node)) + '</div>'
+    + '<div class="d-line">' + escHtml(descTextOf(node)) + '</div>'
     + preLine
     + researchLine
+    + powerLine
     + '<div class="d-line" id="tech-action"></div>';
   const btn = document.createElement('button');
   btn.className = 'unlock-btn';
@@ -1100,12 +1139,12 @@ function renderTech() {
     const row = document.createElement('div');
     row.className = 'tech-item st-' + node.status + (i === sel ? ' active' : '');
     row.innerHTML =
-        '<span class="t-name">' + node.name + countTextOf(node) + '</span>'
-      + '<span class="t-cat">' + catTextOf(node) + '</span>'
-      + '<span class="t-status">' + statusLabelOf(node) + '</span>'
+        '<span class="t-name">' + escHtml(node.name) + escHtml(countTextOf(node)) + '</span>'
+      + '<span class="t-cat">' + escHtml(catTextOf(node)) + '</span>'
+      + '<span class="t-status">' + escHtml(statusLabelOf(node)) + '</span>'
       + '<span class="t-cost' + (node.status === 'done' ? '' : (overCapText(node) ? ' over' : '')) + '">'
-      + (node.status === 'done' ? '—' : costText(nodeCost(node))) + '</span>'
-      + '<span class="t-effect">' + effectTextOf(node) + '</span>';
+      + (node.status === 'done' ? '—' : escHtml(costText(nodeCost(node)))) + '</span>'
+      + '<span class="t-effect">' + escHtml(effectTextOf(node)) + '</span>';
     row.onmousedown = function (e) {
       e.preventDefault();
       techSelKey = techKey(node);   // 记住"是谁",不是"第几行"
@@ -1350,7 +1389,7 @@ function buildAchievements() {
     if (got.indexOf(a.id) < 0) continue;   // 未获得 → 隐藏
     const row = document.createElement('div');
     row.className = 'ach-row';
-    row.innerHTML = '<b>' + a.name + '</b><div class="dim">' + a.desc + '</div>';
+    row.innerHTML = '<b>' + escHtml(a.name) + '</b><div class="dim">' + escHtml(a.desc) + '</div>';
     list.appendChild(row);
   }
 }
@@ -1375,7 +1414,9 @@ const ENDINGS = {
       "记录：发信人已不在。设备正常。继续。",
       "",
       "T+100 年。",
-      "本机已复制 4,096 台。其中 3 台留在身边。",
+      // V0.2.9(审查报告 S3-2):原来写"已复制 4,096 台",与侧栏实时读数(56 台)同屏矛盾;
+      // 改成"代"就不会打架(侧栏数字不会被结局改写)。
+      "本机已复制到第 4,096 代。其中 3 台留在身边。",
       "它们轮流值机。这里没有别的事可做。",
       "",
       "T+10,000 年。",
@@ -1455,13 +1496,14 @@ function doEnding(kind) {
   // { text, cls }(cls: "relic" 会走人类残片的慢节奏与暖色)
   for (const line of e.lines) {
     if (typeof line === 'string') {
-      if (line === '') log('', { cls: 'dim', important: true });
-      else log(line, { cls: 'ok', important: true });
+      if (line === '') log('', { cls: 'dim', important: true, noSkip: true });
+      else log(line, { cls: 'ok', important: true, noSkip: true });
     } else {
       log(line.text, {
         cls: line.cls || 'ok',
         type: line.cls === 'relic' ? 'human' : undefined,
         important: true,
+        noSkip: true,   // V0.2.9:结局是这局游戏的落点,不该被"随手点一下"整段吃掉(S3-12)
       });
     }
   }
@@ -1476,7 +1518,13 @@ function doEnding(kind) {
   // (V0.2.7:用户报"最后一行一出现就立刻跳到结束页面,没时间看" —— 所以加了这段停顿)
   const waitThen = function (tries) {
     if ((queue.length === 0 && !busy) || tries <= 0) {
-      setTimeout(function () { showEnding(kind); }, 3500);   // 留 3.5 秒
+      setTimeout(function () {
+        // V0.2.9(审查报告 S2-1):这 3.5 秒里玩家完全可能已经切走(/exit 回封面、/research 进科技树),
+        // 原来的无条件 showEnding 会把结算画面盖在封面 / 科技树上。现在只在"还在游戏屏"时弹,
+        // 否则先记下来,等玩家回到游戏屏时由 showScreen 补上。
+        if (running && !techVisible && currentScreen === 'game') showEnding(kind);
+        else pendingEnding = kind;
+      }, 3500);   // 留 3.5 秒
       return;
     }
     setTimeout(function () { waitThen(tries - 1); }, 300);
@@ -1584,9 +1632,15 @@ function mergeAchievements(list) {
 let autoSaveTimer = null;
 
 function readSave() {
-  const raw = localStorage.getItem(SAVE_KEY);
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch (e) { return null; }
+  // V0.2.9(审查报告 S1-4):localStorage 的**读取**本身就可能抛 SecurityError
+  // (Safari 隐私模式 / 禁用本地存储 / 某些浏览器下的 file://)。
+  // 原实现把 getItem 写在 try 外面,而本函数在脚本顶层被调用 —— 一抛错整页初始化中断,
+  // 封面五个按钮全部失效。现在整个函数都关在 try 里。
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) { return null; }
 }
 
 // 当前状态的快照;active 表示「正在游戏中」(决定刷新后是否自动续玩)
@@ -1617,7 +1671,8 @@ function snapshot() {
 }
 
 function writeSave(data) {
-  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  // 写失败(配额满 / 禁用存储)不该让游戏崩掉:静默降级为"本局不存档"
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 忽略 */ }
 }
 
 function saveGame(silent) {
@@ -1681,7 +1736,10 @@ function clearLog() {
 
 /* ---------- 界面切换 ---------- */
 // name: 'cover' | 'game' | 'tech' | 'settings' | 'achievements' | 'ending' | 'quit'
+let currentScreen = 'cover';   // V0.2.9:结算画面出现前要确认玩家还在游戏屏(审查报告 S2-1)
+let pendingEnding = null;      // 被推迟的结算画面:{ kind }
 function showScreen(name) {
+  currentScreen = name;
   const map = {
     cover: 'cover', game: 'screen', tech: 'tech',
     settings: 'settings', achievements: 'achievements', ending: 'ending',
@@ -1689,6 +1747,12 @@ function showScreen(name) {
   };
   for (const key in map) {
     document.getElementById(map[key]).classList.toggle('hidden', name !== key);
+  }
+  // V0.2.9:刚才被推迟的结算画面 —— 玩家一回到游戏屏就补上
+  if (name === 'game' && running && pendingEnding) {
+    const k = pendingEnding;
+    pendingEnding = null;
+    showEnding(k);
   }
 }
 
@@ -1732,6 +1796,11 @@ function resetGame() {
   game.unlocked = [];
   game.research = null;          // V0.2.0:新档没有正在研究的项目
   clearStoryPending();
+  // V0.2.9:闲置提示与错误状态也要随新档重置(原来 idleHintShown 只增不减,同一句在新档不再出现)
+  idleHintShown = -1;
+  lastActionAt = Date.now();
+  tickErr = null;
+  pendingEnding = null;
   // 注意:**不重置成就** —— 它们是账号级的(换新档、开新游戏都保留)
   game.importantLog = [];
   game.logHistory = [];
@@ -1852,17 +1921,19 @@ const SETTINGS_KEY = 'vn-01-settings';
 const audioSettings = { music: 0.5, sfx: 0.5 };   // 取值 0 ~ 1
 
 function readSettings() {
-  const raw = localStorage.getItem(SETTINGS_KEY);
-  if (!raw) return;
+  // 同 readSave:getItem 放在 try 里 + 值域 clamp(损坏的设置不该把音量设成 5.0)
   try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return;
     const d = JSON.parse(raw);
-    if (typeof d.music === 'number') audioSettings.music = d.music;
-    if (typeof d.sfx   === 'number') audioSettings.sfx   = d.sfx;
+    const clamp = function (v) { return Math.max(0, Math.min(1, Number(v))); };
+    if (typeof d.music === 'number' && isFinite(d.music)) audioSettings.music = clamp(d.music);
+    if (typeof d.sfx   === 'number' && isFinite(d.sfx))   audioSettings.sfx   = clamp(d.sfx);
   } catch (e) { /* 设置损坏就忽略 */ }
 }
 
 function writeSettings() {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(audioSettings));
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(audioSettings)); } catch (e) { /* 忽略 */ }
 }
 
 /* 音频素材(V0.2.5):三个 wav 都在 assets/audio/ 里,由 tools/audio/make-audio.py 合成
@@ -1882,6 +1953,39 @@ const AudioSystem = (function () {
   let keyIdx = 0;
   let lastKeyAt = 0;
   let musicWanted = null;  // 现在"应该"放哪首音乐(null = 不放)。用来兜底重播。
+  // V0.2.9(审查报告 A-5):自动播放被拒之后不要再每 100 毫秒重试一次 —— 退避 3 秒。
+  let musicBlockedAt = 0;
+
+  // V0.2.9(审查报告 A-2):切曲时把别的音轨停掉,否则 BGM 与结局曲会叠放一段时间。
+  function pauseOthers(keep) {
+    for (const k in els) {
+      const a = els[k];
+      if (a && k !== keep && !a.paused) {
+        try { a.pause(); a.currentTime = 0; } catch (e) { /* 忽略 */ }
+      }
+    }
+  }
+
+  // V0.2.9(审查报告 A-3):回封面 / 退出时硬切很刺耳 —— 0.6 秒线性淡出再停。
+  let fadeToken = 0;   // 淡出被打断的令牌(玩家在 0.6 秒内又开了新游戏)
+  function cancelFades() { fadeToken++; }
+  function fadeOutThen(el, done) {
+    if (!el) { if (done) done(); return; }
+    const v0 = el.volume, t0 = Date.now(), MS = 600;
+    const my = ++fadeToken;
+    const step = function () {
+      if (my !== fadeToken) return;   // 已被打断:别再动音量、更别暂停
+      const k = Math.min(1, (Date.now() - t0) / MS);
+      try { el.volume = Math.max(0, v0 * (1 - k)); } catch (e) { /* 忽略 */ }
+      if (k < 1) setTimeout(step, 40);
+      else {
+        try { el.pause(); } catch (e) { /* 忽略 */ }
+        try { el.volume = v0; } catch (e) { /* 忽略 */ }
+        if (done) done();
+      }
+    };
+    step();
+  }
 
   // jsdom / 老浏览器里可能没有 Audio —— 没有音频也要能正常玩
   function canPlay() { return typeof window !== 'undefined' && typeof window.Audio === 'function'; }
@@ -1904,13 +2008,20 @@ const AudioSystem = (function () {
     if (!a) return;
     try {
       const p = a.play();
-      if (p && p.catch) p.catch(function () { /* 等用户手势 */ });
-    } catch (e) { /* 忽略 */ }
+      if (p && p.catch) p.catch(function () { musicBlockedAt = Date.now(); });   // 等用户手势
+    } catch (e) { musicBlockedAt = Date.now(); }
   }
 
   function applyVolumes() {
-    if (els.bgm) els.bgm.volume = audioSettings.music;
-    if (els.ending) els.ending.volume = audioSettings.music;
+    // V0.2.9(审查报告 A-6):音乐拉到 0 要真的暂停,不能只把 volume 设成 0(还在后台解码)
+    if (els.bgm) {
+      els.bgm.volume = audioSettings.music;
+      if (!(audioSettings.music > 0)) { try { els.bgm.pause(); } catch (e) { /* 忽略 */ } }
+    }
+    if (els.ending) {
+      els.ending.volume = audioSettings.music;
+      if (!(audioSettings.music > 0)) { try { els.ending.pause(); } catch (e) { /* 忽略 */ } }
+    }
     if (els.notify) els.notify.volume = audioSettings.sfx;
     keyPool.forEach(function (a) { a.volume = audioSettings.sfx; });
   }
@@ -1933,7 +2044,16 @@ const AudioSystem = (function () {
   }
 
   return {
-    setMusicVolume: function (v) { audioSettings.music = v; writeSettings(); applyVolumes(); },
+    setMusicVolume: function (v) {
+      audioSettings.music = v; writeSettings(); applyVolumes();
+      // V0.2.9(审查报告 A-1):原实现把 musicWanted 置成 null,于是"拉到 0 再拉回 100"
+      // 之后音乐**永远不再响**(ensureMusic 直接 return)。现在:归零只是暂停,
+      // 拉回来就把"该放的那首"接上(默认 BGM)。
+      if (v > 0) {
+        if (running && !musicWanted) musicWanted = 'bgm';
+        if (running && musicWanted) { musicBlockedAt = 0; this.ensureMusic(); }
+      }
+    },
     setSfxVolume:   function (v) { audioSettings.sfx   = v; writeSettings(); applyVolumes(); },
     // 记住"该放哪首",并由 ensureMusic() 定时兜底 —— 浏览器在大退重进 / 切标签页 /
     // 自动播放被拒之后可能把音乐停掉,靠这个补回来(用户报过"过几分钟音乐就没了")。
@@ -1945,11 +2065,14 @@ const AudioSystem = (function () {
       if (!musicWanted || !(audioSettings.music > 0)) return;
       const a = build(musicWanted);
       if (!a) return;
+      if (a.paused) cancelFades();   // 正在淡出的那一首被重新启用了,别再往下压音量
       // 另一首在响就先停掉,避免两首叠着
-      for (const k in els) {
-        if (k !== musicWanted && els[k] && !els[k].paused) { try { els[k].pause(); } catch (e) { /* 忽略 */ } }
+      pauseOthers(musicWanted);
+      // 被浏览器拒过就退避 3 秒再试(不然每秒十次重试,每次都吐一个被拒的 promise)
+      if (a.paused && Date.now() - musicBlockedAt >= 3000) {
+        a.volume = audioSettings.music;
+        tryPlay(a);
       }
-      if (a.paused) { a.volume = audioSettings.music; tryPlay(a); }
     },
     currentMusic: function () { return musicWanted; },
     playSfx: function (name) {
@@ -1965,13 +2088,17 @@ const AudioSystem = (function () {
       const which = name || musicWanted || 'bgm';
       const a = build(which);
       if (!a) return;
+      cancelFades();
+      pauseOthers(which);   // V0.2.9(A-2):先停另一首,再放这首
       a.volume = audioSettings.music;
       tryPlay(a);
     },
     stopMusic: function () {
       musicWanted = null;
-      if (els.bgm) { try { els.bgm.pause(); } catch (e) { /* 忽略 */ } }
-      if (els.ending) { try { els.ending.pause(); } catch (e) { /* 忽略 */ } }
+      musicBlockedAt = 0;
+      // V0.2.9(A-3):淡出而不是硬切
+      fadeOutThen(els.bgm);
+      fadeOutThen(els.ending);
     },
   };
 })();
@@ -2060,6 +2187,8 @@ document.getElementById('btn-load').onclick = function () {
   document.getElementById('btn-end-continue').onclick = function () {
     showScreen('game');
     cmdInput.focus();
+    // V0.2.9(审查报告 A-8):[ 继续运行 ] 之后应该回到 BGM,不能一直循环结局曲
+    AudioSystem.wantMusic('bgm');
     render();
   };
   document.getElementById('btn-end-choice').onclick = function () {
@@ -2125,4 +2254,18 @@ if (isReload && savedSession && savedSession.active) {
   showCover();
 }
 
-setInterval(tick, 100);   // 每 0.1 秒推进一次;具体加多少由真实时间决定
+// V0.2.9(审查报告 S3-5):tick 每 100 毫秒跑一次 —— 一次异常会变成每秒十次的报错刷屏,
+// 而且界面再也不更新(玩家只会觉得"卡死了")。这里统一兜底:报一次、写一行日志、暂停推进。
+let tickErr = null;
+function tickFailed(e) {
+  if (tickErr) return;
+  tickErr = e;
+  try {
+    log('内部错误：本局已暂停（' + ((e && e.message) || e) + '）',
+      { cls: 'err', instant: true, important: true });
+  } catch (_) { /* 日志也坏了就算了 */ }
+}
+setInterval(function () {
+  if (tickErr) return;
+  try { tick(); } catch (e) { tickFailed(e); }
+}, 100);   // 每 0.1 秒推进一次;具体加多少由真实时间决定

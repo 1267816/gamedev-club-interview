@@ -84,7 +84,11 @@ function run() {
       ok('立项后 game.research 指向这一项', peek('game.research && game.research.id') === 'click_mine',
         String(peek('game.research && game.research.id')));
       ok('此刻还没解锁(要等研究完)', peek('game.unlocked').length === 0, JSON.stringify(peek('game.unlocked')));
-      ok('材料已经扣掉', peek('game.material') < 155 && peek('game.material') > 120, String(Math.round(peek('game.material'))));
+      // V0.2.9:花费不再写死(40 → 25),从数据表现算
+      ok('材料已经扣掉',
+        peek('game.material') < 190 - peek('techOf("click_mine").cost.material') + 12
+        && peek('game.material') > 190 - peek('techOf("click_mine").cost.material') - 12,
+        String(Math.round(peek('game.material'))));
       ok('列表那一行显示「研究中 N%」', rowText('简单采集').indexOf('研究中') >= 0, rowText('简单采集').trim().slice(0, 40));
       ok('右栏读数出现「研究 简单采集 N%」一行',
         doc.getElementById('readout-tech').textContent.indexOf('研究简单采集') >= 0

@@ -139,7 +139,10 @@ function run() {
       ok('立项成功(材料已扣、进入研究中)',
         peek('game.research && game.research.id') === 'click_mine' && peek('game.unlocked').length === 0,
         String(peek('game.research && game.research.id')));
-      ok('扣掉 40 材料(190-40+自动产出)', peek('game.material') < 155 && peek('game.material') > 120,
+      // V0.2.9:第一项科技的花费不再写死(40 → 25),从数据表现算
+      ok('扣掉「简单采集」的花费(190 − 花费 + 自动产出)',
+        peek('game.material') < 190 - peek('techOf("click_mine").cost.material') + 12
+        && peek('game.material') > 190 - peek('techOf("click_mine").cost.material') - 12,
         String(Math.round(peek('game.material'))));
       finishResearch();
       await sleep(200);

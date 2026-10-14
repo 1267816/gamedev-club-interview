@@ -167,7 +167,9 @@ function run() {
 
       console.log('\n【E. 详情 / 键盘导航】');
       ok('默认选中第一项', selName() === '简单采集');
-      ok('详情含花费与效果', doc.getElementById('tech-detail').textContent.indexOf('材料 40') >= 0
+      // V0.2.9:花费不再写死(40 → 25),从数据表现算
+      ok('详情含花费与效果', doc.getElementById('tech-detail').textContent
+        .indexOf('材料 ' + peek('techOf("click_mine").cost.material')) >= 0
         && doc.getElementById('tech-detail').textContent.indexOf('解锁 /mine 的点击按钮') >= 0);
       press(doc.getElementById('tech-list'), 'ArrowDown');
       await sleep(60);
@@ -224,7 +226,10 @@ function run() {
       finishResearch();
       await sleep(200);
       ok('鼠标点 [ 解锁 ] 成功', peek('game.unlocked').join(',') === 'click_mine', peek('game.unlocked').join(','));
-      ok('扣了 40 材料', peek('game.material') < 115 && peek('game.material') > 100,
+      // V0.2.9:同理,用数据表里的花费现算
+      ok('扣掉了「简单采集」的材料',
+        peek('game.material') < 150 - peek('techOf("click_mine").cost.material') + 15
+        && peek('game.material') > 150 - peek('techOf("click_mine").cost.material') - 15,
         String(Math.round(peek('game.material'))));
       ok('解锁后出现 [ /mine ]', !!doc.getElementById('btn-mine'));
       ok('解锁按钮变成 [ 已解锁 ] 且禁用', doc.querySelector('#tech-detail .unlock-btn').textContent === '[ 已解锁 ]'
