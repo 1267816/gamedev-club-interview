@@ -266,7 +266,8 @@ const GAME_DATA = {
   // 条件写法与 story 的 when 相同;满足条件的**最后一条**生效(和 guideHints 一样)
   idleHints: [
     { when: { commandsRun: 0 }, text: "指南：如果不知道做什么，可以输入 /mine 采集材料。" },
-    { when: { material: 40 },   text: "指南：材料够 40 了。输入 /research 打开科技树，先解锁「简单采集」。" },
+    // V0.2.11:「简单采集」在 V0.2.9 已从 40 降到 25 —— 这行提示当时漏改了,数字跟着修
+    { when: { material: 25 },   text: "指南：材料够 25 了。输入 /research 打开科技树，先解锁「简单采集」。" },
     { when: { material: 140 },  text: "指南：继续在科技树里解锁「批量复制」，以使用图形化界面进行复制。" },
     { when: { probes: 5 },      text: "指南：继续 /mine 与 /replicate ，探测器越多，探测进度和材料才能更快获取。" },
     { when: { material: 320 },  text: "指南：去科技树解锁并建造「反应堆」，发展科技不能只靠应急反应堆来供能。" },
