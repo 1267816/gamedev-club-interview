@@ -320,12 +320,15 @@ function tick() {
 
   // ④ 复制助手:每 repEvery 秒自动复制一次。只在材料 ≥ 成本 × repReserve 时动手 ——
   //    否则它会把研究用的材料全吃掉(用户反馈的核心问题)
+  //    V0.2.8:这条保留量再按"材料上限 × repReserveCapFrac"封顶。复制成本是几何增长,
+  //    上限是加算,后期 成本×3 会超过上限 → 助手永远不动手(见 docs/plan.md 的 V0.2.8 节)。
   if (slotsFor('rep') > 0) {
     repTimer += dt * slotsFor('rep');
     while (repTimer >= D.numbers.repEvery) {
       repTimer -= D.numbers.repEvery;
       const c = probeCost();
-      if (game.material >= c * D.numbers.repReserve) {
+      const gate = Math.min(c * D.numbers.repReserve, cap * D.numbers.repReserveCapFrac);
+      if (game.material >= Math.max(c, gate)) {
         game.material -= c; game.probes += 1;
         repDone += 1;
       }
@@ -581,7 +584,15 @@ function buildCommands() {
 }
 
 function commandHint(c) {
-  if (c.id === 'replicate') return '消耗 ' + fmtNum(probeCost()) + ' 材料，复制一个探测器（每复制一次成本 ×1.10)';
+  if (c.id === 'replicate') {
+    const cost = probeCost();
+    // V0.2.8:成本涨过仓库上限时,要讲"装不下"而不是"材料不够" —— 否则玩家会盯着满仓发懵
+    if (cost > matCap()) {
+      return '仓库装不下：下一台需要 ' + fmtNum(cost) + ' 材料，当前上限只有 ' + fmtNum(matCap())
+        + ' —— 先在科技树里扩建「仓库」';
+    }
+    return '消耗 ' + fmtNum(cost) + ' 材料，复制一个探测器（每复制一次成本 ×1.10)';
+  }
   return c.hint;
 }
 
@@ -711,7 +722,12 @@ function runCommand(id) {
 
   } else if (id === 'replicate') {
     const cost = probeCost();   // V0.1.2:成本几何增长(10 × 1.10^n)
-    if (game.material < cost) {
+    if (cost > matCap()) {
+      // V0.2.8:这一条和"材料不够"是两回事 —— 成本已经超过上限,攒多久都买不起,
+      // 所以必须指向「仓库」(与科技树里那条"仓库装不下"的措辞保持一致)
+      log('仓库装不下：下一台需要 ' + fmtNum(cost) + ' 材料，当前上限只有 ' + fmtNum(matCap())
+        + ' —— 先在科技树里扩建「仓库」', { cls: 'err', instant: true, group: 'poor' });
+    } else if (game.material < cost) {
       // 连点也会刷屏:同一类提示折叠成一行(用户要求 5)
       log('材料不足：需要 ' + fmtNum(cost) + ' 材料', { cls: 'err', instant: true, group: 'poor' });
     } else {

@@ -8,7 +8,7 @@ const GAME_DATA = {
   title: "VN-CommandLineSystem 自复制探测器命令行系统",
 
   // 游戏版本号(与 plan.md / test_datalog.md 的版本保持一致)
-  version: "V0.2.7",
+  version: "V0.2.8",
 
   // 数值:全部集中在这里,方便"一次只调一样"
   numbers: {
@@ -27,6 +27,9 @@ const GAME_DATA = {
       decoderRate:   0.45,  // 每个解析器 数据/秒(V0.2.4 方案 B:0.3 → 0.45,配合数据成本下降)
     repEvery:      4,     // 复制助手:每 4 秒自动复制一次
     repReserve:    3,     // 复制助手只在材料 ≥ 复制成本 × 3 时动手(不然会把材料吃光)
+    repReserveCapFrac: 0.8, // V0.2.8:保留量再按"材料上限的 80%"封顶。复制成本是几何增长(×1.10),
+                            // 材料上限却是加算(+150/仓库),后期 成本×3 会超过上限 → 助手永远不动手。
+                            // 封顶后:早期行为完全不变(成本×3 通常低于 0.8 上限),后期自动兜住。
       warehouseCap:  200,   // 初始材料上限
       warehouseAdd:  150,   // 每座仓库把上限 +150(V0.2.7:原来是 ×1.6 乘算 —— 不符合现实)
     // 星球探测进度(灵感 1):速率 = 探测器数 × scanK × (1 − 进度/scanFalloff) × (通信 ? 1 : scanNoCommMul)
@@ -59,10 +62,10 @@ const GAME_DATA = {
   // 建筑(用材料建造;在科技树里解锁后出现)
   buildings: [
     { id: "warehouse", name: "仓库", cat: "存储", unlockedBy: "click_mine", cost: { material: 120 }, growth: 1.16,
-      effect: "材料上限 ×1.6（初始 200)",
+      effect: "材料上限 +150（初始 200)",
       desc: "材料必须有地方放。扩建仓库，上限跟着涨。" },
     { id: "reactor", name: "反应堆", cat: "能源", unlockedBy: "reactor", cost: { material: 120 }, growth: 1.18,
-      effect: "能量 +2.0/秒，能量上限 +80",
+      effect: "能量 +2.0/秒，能量上限 +25",
       desc: "重启休眠的聚变堆：探测器第一次有了自己的电力。" },
     { id: "core", name: "计算核心", cat: "算力", unlockedBy: "core", cost: { material: 220 }, growth: 1.18,
       effect: "算力槽 +1，耗能 1.5/秒",
@@ -74,9 +77,10 @@ const GAME_DATA = {
     { id: "drone", name: "采集助手", cat: "自动化", unlockedBy: "drone", cost: { material: 60 }, growth: 1.12, slot: 1,
       effect: "每台探测器 +0.12 材料/秒（可叠加）；占 1 个算力槽", desc: "让探测器自己去找矿：它们的采集效率随数量一起提高。" },
     { id: "decoder", name: "解析器", cat: "解析", unlockedBy: "decode", cost: { material: 90 }, growth: 1.12, slot: 1,
-      effect: "数据 +0.3/秒；占 1 个算力槽", desc: "把那条广播拆成可读的数据流。" },
+      effect: "数据 +0.45/秒；占 1 个算力槽", desc: "把那条广播拆成可读的数据流。" },
     { id: "rep", name: "复制助手", cat: "自动化", unlockedBy: "autorep", cost: { material: 200 }, growth: 1.15, slot: 1,
-      effect: "每 4 秒自动复制一次（材料 ≥ 成本×3 时）；占 1 个算力槽", desc: "把复制指令写进循环：它开始自己变多了。" },
+      effect: "每 4 秒自动复制一次（材料 ≥ 成本×3，最高按上限×0.8 封顶）；占 1 个算力槽",
+      desc: "把复制指令写进循环：它开始自己变多了。" },
   ],
 
   // 科技表(14 项;花费与节奏见 docs/research.md 第 12 / 19 节与第 28 节)

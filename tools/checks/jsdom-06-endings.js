@@ -171,6 +171,11 @@ function run() {
       ok('没到 75% 时 /stay 被拦下', lines().some((l) => l.indexOf('还不到时候') >= 0));
       ok('两个结局按钮还没出现', !btn('btn-stay') && !btn('btn-go'));
       peek('game.unlocked.push("comm")');
+      // V0.2.8:直接压 scan 会让 b1~b8 那一串节点(十几行打字机)一次性涌进队列,
+      // 排在后面的 /go 提示要等它们排干才出现 —— 这条断言只关心"被不被拦",
+      // 所以先把除 e1 以外的节点静默记为已触发(复用游戏自己的 backfillStory 思路)。
+      peek('D.story.filter(function (n) { return n.id !== "e1"; })'
+        + '.forEach(function (n) { if (game.fired.indexOf(n.id) < 0) game.fired.push(n.id); })');
       peek('game.scan = 75');   // 直接压到阈值(tick 会继续往上走)
       await sleep(900);
       ok('75% 触发「回声塔」节点 e1', peek('game.fired').indexOf('e1') >= 0, JSON.stringify(peek('game.fired')));

@@ -15,7 +15,7 @@ npm i jsdom
 
 ```
 node run-all.js            # 一次跑完(交付前跑这个)
-node run-all.js --quick    # 快速档:跳过最慢的 3 套,约 2.5 分钟(改代码时每轮跑它)
+node run-all.js --quick    # 快速档:跳过最慢的 3 套,约 50 秒(改代码时每轮跑它)
 node jsdom-05-economy.js   # 也可以单独跑某一个
 ```
 
@@ -25,7 +25,7 @@ node jsdom-05-economy.js   # 也可以单独跑某一个
 | `jsdom-02-save-load.js` | 刷新续玩 / 关窗重开 / 旧存档兜底 |
 | `jsdom-03-tech-view.js` | 科技树视图、解锁、命令面板、成就页、闲置提示 |
 | `jsdom-04-ui-detail.js` | 筛选组合、键盘导航、大数缩写、坏档 / 残缺档 |
-| `jsdom-05-economy.js` | 几何成本、能量、算力槽、数据、仓库上限、探测进度与剧情改挂 |
+| `jsdom-05-economy.js` | 几何成本、能量、算力槽、数据、仓库上限、探测进度与剧情改挂、**复制助手保留量封顶(V0.2.8)** |
 | `jsdom-06-endings.js` | 模块停用、复制助手保留量、结局二选一与「回到选择时刻」 |
 | `jsdom-07-v014.js` | V0.1.4 的报告项:成就预读、读数面板、全角标点、折叠、前置行等 |
 | `jsdom-08-v015.js` | V0.1.5 的报告项:效果文字尊重数据表、小数显示、解析器加速探测、类别问号恢复、账号级成就 |
@@ -35,7 +35,8 @@ node jsdom-05-economy.js   # 也可以单独跑某一个
 
 ## 音频素材
 
-`assets/audio/` 里的三个 wav 是**本仓库自己合成**的(没有第三方素材,所以没有授权问题),
+`assets/audio/` 里的**四个** wav(`key` / `notify` / `bgm` / `ending`)是**本仓库自己合成**的
+(没有第三方素材,所以没有授权问题),
 生成脚本在 `tools/audio/make-audio.py`,想改音色就改参数重跑:
 
 ```

@@ -52,6 +52,8 @@ const P = {
   decoderCost: 90, decoderGrowth: 1.12, decoderRate: 0.45,    // 解析器 → 数据(V0.2.4 方案 B:0.3 → 0.45)
   repCost: 200, repGrowth: 1.15, repEvery: 4,                 // 复制助手:每 4 秒自动复制
   repReserve: 3,                                             // 只在材料 ≥ 成本×3 时动手
+  repReserveCapFrac: 0.8,                                    // V0.2.8:保留量再按"上限×0.8"封顶
+                                                             // (成本几何增长 vs 上限加算 → 后期成本×3 顶穿上限)
 
   // ---- 仓库:材料必须有地方放(D5 灵感 5) ----
   whCost: 120, whGrowth: 1.16, whBaseCap: 200, whAdd: 150,   // V0.2.7:乘算 → 加算(每座 +150,更真实)
@@ -171,7 +173,8 @@ function physical(s, dt) {
     while (s.repTimer >= P.repEvery) {
       s.repTimer -= P.repEvery;
       const c = probeCost(s.probes - 1);
-      if (s.material >= c * P.repReserve) { s.material -= c; s.probes += 1; }
+      const gate = Math.min(c * P.repReserve, cap * P.repReserveCapFrac);   // V0.2.8:封顶
+      if (s.material >= Math.max(c, gate)) { s.material -= c; s.probes += 1; }
     }
   }
   const scanMul = s.unlocked.comm ? 1 : P.scanNoCommMul;

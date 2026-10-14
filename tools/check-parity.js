@@ -39,6 +39,7 @@ cmp('droneRatePerProbe / droneRatePerProbe', G.numbers.droneRatePerProbe, sim.dr
 cmp('decoderRate / decoderRate', G.numbers.decoderRate, sim.decoderRate);
 cmp('repEvery / repEvery', G.numbers.repEvery, sim.repEvery);
 cmp('repReserve / repReserve', G.numbers.repReserve, sim.repReserve);
+cmp('repReserveCapFrac / 同名', G.numbers.repReserveCapFrac, sim.repReserveCapFrac);
 cmp('warehouseCap / whBaseCap', G.numbers.warehouseCap, sim.whBaseCap);
 cmp('warehouseAdd / whAdd', G.numbers.warehouseAdd, sim.whAdd);
 cmp('scanK / scanK', G.numbers.scanK, sim.scanK);

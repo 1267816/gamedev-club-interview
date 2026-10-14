@@ -272,10 +272,26 @@ function run() {
       console.log('\n【H. 回归】');
       peek('game.material = 100000');
       peek('game.modules = { rep: 1 }');
+      peek('game.off = {}');   // V0.2.8:别把前面小节里被停用的状态带进来
       peek('game.buildings = { warehouse: 6, reactor: 3, core: 4 }');   // 给复制助手留出算力槽
       const p0 = peek('game.probes');
-      await sleep(5000);
-      ok('复制助手会自动复制(5 秒内 +1)', peek('game.probes') > p0, p0 + ' → ' + peek('game.probes'));
+      // V0.2.8:改成"等状态变化"而不是死等固定秒数 —— 4 路并行跑时页面时钟会被挤慢,
+      // 死等秒数会假红(同一条断言单独跑是绿的)。失败信息里带上现场,便于排查。
+      const autoOk = await waitFor(() => peek('game.probes') > p0, 20000);
+      ok('复制助手会自动复制(20 秒内 +1)', autoOk, p0 + ' → ' + peek('game.probes')
+        + ' / 在跑=' + peek("slotsFor('rep')") + ' / off=' + peek('JSON.stringify(game.off)')
+        + ' / t=' + peek('game.timeSec').toFixed(1));
+      // V0.2.8 回归:成本是几何增长(×1.10)、上限是加算(+150/仓库)→ 后期"成本×3"会超过上限,
+      // 保留量必须按"上限×0.8"封顶,否则复制助手会永远停手(用户报的打磨项)。
+      // 取一个正好落在坏区间的局面:成本 < 上限 < 成本×3
+      peek('game.probes = 45; game.buildings = { warehouse: 5, reactor: 20, core: 20 }; game.modules = { rep: 1 }');
+      const costNow = peek('probeCost()'), capNow = peek('matCap()');
+      peek('game.material = matCap()');
+      const p1 = peek('game.probes');
+      const cappedOk = await waitFor(() => peek('game.probes') > p1, 20000);
+      ok('上限低于"成本×3"时复制助手仍然动手(保留量已封顶)', cappedOk,
+        '上限 ' + Math.round(capNow) + ' / 成本 ' + Math.round(costNow) + ' / 成本×3 '
+        + Math.round(costNow * 3) + ' → 探测器 ' + p1 + ' → ' + peek('game.probes'));
       // V0.2.0:解锁日志变成"> 研究完成 X —— 效果"(立项那行是"> 立项 X —— 研究 N 秒")
       const allText = lines().join('\n');
       const repOk = allText.indexOf('研究完成 反应堆') >= 0 || allText.indexOf('立项 反应堆') >= 0;
