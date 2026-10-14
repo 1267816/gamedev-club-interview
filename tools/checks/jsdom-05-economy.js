@@ -242,10 +242,18 @@ function run() {
       }
       const fired = peek('JSON.stringify(game.fired)');
       ok('m1(2%) 触发', fired.indexOf('"m1"') >= 0, fired);
-      ok('残片 014(8%) 触发', fired.indexOf('"frag2"') >= 0);
+      // V0.2.17:残片按**世界时间正序**重排 + 重编号(frag1~frag10),断言跟着改
+      ok('残片 001(第一次复制后) 触发', fired.indexOf('"frag1"') >= 0);
+      ok('残片 002(8%) 触发', fired.indexOf('"frag2"') >= 0);
       ok('m2(13%) 触发', fired.indexOf('"m2"') >= 0);
-      ok('残片 097(40%) 触发', fired.indexOf('"frag3"') >= 0);
-      ok('残片 233(75%) 触发', fired.indexOf('"frag4"') >= 0);
+      ok('残片 003(13%) 触发', fired.indexOf('"frag3"') >= 0);
+      ok('残片 004(20%) 触发', fired.indexOf('"frag4"') >= 0);
+      ok('残片 005(30%) 触发', fired.indexOf('"frag5"') >= 0);
+      ok('残片 006(40%) 触发', fired.indexOf('"frag6"') >= 0);
+      ok('残片 007(52%) 触发', fired.indexOf('"frag7"') >= 0);
+      ok('残片 008(64%) 触发', fired.indexOf('"frag8"') >= 0);
+      ok('残片 009(68%) 触发', fired.indexOf('"frag9"') >= 0);
+      ok('残片 010(72%) 触发', fired.indexOf('"frag10"') >= 0);
       ok('100% 有收束行', fired.indexOf('"m5"') >= 0);
       ok('成就「第一处痕迹」/「回声塔」/「全部覆盖」', ['first_frag', 'echo_tower', 'whole_earth']
         .every((id) => peek('game.achievements').indexOf(id) >= 0), peek('JSON.stringify(game.achievements)'));

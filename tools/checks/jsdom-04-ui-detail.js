@@ -309,7 +309,9 @@ function run() {
       console.log('\n【I. 闲置提示:会提示、不重复、封面不提示】');
       const idleBefore = lines().filter((l) => l.indexOf('指南：') === 0).length;
       peek('lastActionAt = Date.now() - 200000');
-      const fired = await waitFor(() => lines().filter((l) => l.indexOf('指南：') === 0).length > idleBefore, 8000);
+      // V0.2.17:窗口 8 → 25 秒 —— 4 路并行跑时页面时钟会被挤慢,8 秒会假红
+      // (单独跑一直是绿的;与 jsdom-05 那两条同源,统一放宽)
+      const fired = await waitFor(() => lines().filter((l) => l.indexOf('指南：') === 0).length > idleBefore, 25000);
       ok('3 分钟无操作 → 提示一句', fired);
       const idleAfter = lines().filter((l) => l.indexOf('指南：') === 0).length;
       peek('lastActionAt = Date.now() - 200000');

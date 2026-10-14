@@ -157,8 +157,10 @@ function run() {
       const f = fired();
       console.log('\n【体检】');
       ok('没有重复触发(每个 id 只出现一次)', f.length === new Set(f).size, String(f.length) + ' / ' + String(new Set(f).size));
-      for (const id of ['p1', 'p1b', 'p2', 'p3', 'p4', 'g1', 'm1', 'frag2', 'm2', 'm2b', 'm2c',
-        'm3', 'frag3', 'm4', 'frag4', 'm4b', 'm5', 'e1']) {
+      // V0.2.17:残片按世界时间重排 + 重编号(frag1~frag10),清单跟着更新
+      for (const id of ['p1', 'p1b', 'p2', 'frag1', 'p4', 'g1', 'm1', 'frag2', 'm2', 'frag3',
+        'frag4', 'm2b', 'm2c', 'frag5', 'm3', 'frag6', 'm4', 'frag7', 'frag8', 'frag9', 'frag10',
+        'm4b', 'm5', 'e1']) {
         ok('节点 ' + id + ' 触发了', f.indexOf(id) >= 0);
       }
       ok('探测推到 100%', Number(peek('game.scan')) >= 99.9, String(Math.round(peek('game.scan'))));
@@ -191,7 +193,9 @@ function run() {
         at('p1b') == null || (at('p1') != null && at('p1') <= at('p1b')),
         String(at('p1')) + ' vs ' + String(at('p1b')));
       // 按探测百分比的"发现顺序"必须单调(这是玩家真正感知到的东西)
-      const byScan = ['m1', 'frag2', 'm2', 'm2b', 'm2c', 'frag3', 'm4', 'frag4', 'm4b', 'm5'];
+      // 期望的发现顺序 = story 表里的顺序 = 世界时间的顺序(V0.2.17 起两者一致)
+      const byScan = ['m1', 'frag2', 'm2', 'frag3', 'frag4', 'm2b', 'm2c', 'frag5', 'frag6',
+        'm4', 'frag7', 'frag8', 'frag9', 'frag10', 'm4b', 'm5'];
       const scanOrder = [];
       for (const id of order) if (byScan.indexOf(id) >= 0 && scanOrder.indexOf(id) < 0) scanOrder.push(id);
       const expectScan = byScan.filter((id) => scanOrder.indexOf(id) >= 0);

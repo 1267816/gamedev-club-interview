@@ -90,10 +90,10 @@ async function main() {
   ok('停用写入状态', (await js('JSON.stringify(game.off)')).indexOf('true') > 0, await js('JSON.stringify(game.off)'));
 
   // 结局:直接压到 75%
-  // V0.2.13:先把"75% 之前本该触发"的剧情节点静默标记为已触发 —— 否则 scan 从 0 跳到 75
+  // V0.2.17:先把"75% 之前本该触发"的剧情节点静默标记为已触发 —— 否则 scan 从 0 跳到 75
   // 会把 58 行剧情一次性冲进打字机队列(要打 55 秒),结算画面要等到队列排干才弹,
-  // 这个套件的 60 秒轮询会来不及。只留 75% 那三个节点(残片 007 / 008 / 回声塔 e1)。
-  await js("D.story.filter(function(n){return ['frag9','frag4','e1'].indexOf(n.id) < 0;})" +
+  // 这个套件的 60 秒轮询会来不及。只留 68/72/75 那三个节点(残片 009 / 010 / 回声塔 e1)。
+  await js("D.story.filter(function(n){return ['frag9','frag10','e1'].indexOf(n.id) < 0;})" +
     ".forEach(function(n){ if (game.fired.indexOf(n.id) < 0) game.fired.push(n.id); });");
   await js("game.data = 500; game.unlocked.push('starship','bootstrap');");
   await js("game.scan = 75");
