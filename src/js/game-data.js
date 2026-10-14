@@ -8,7 +8,7 @@ const GAME_DATA = {
   title: "VN-CommandLineSystem 自复制探测器命令行系统",
 
   // 游戏版本号(与 plan.md / test_datalog.md 的版本保持一致)
-  version: "V0.2.9",
+  version: "V0.2.10",
 
   // 数值:全部集中在这里,方便"一次只调一样"
   numbers: {
@@ -211,6 +211,14 @@ const GAME_DATA = {
       label: "/settings",
       hint:  "音量设置（音乐 / 音效）",
       clickable: true,
+    },
+    {
+      // V0.2.10(决策 S4-6):删除存档。**只允许输入命令**(clickable:false → 不给按钮),
+      // 而且必须连续输入两次才真的删 —— 不可逆的操作不该能靠误点完成。
+      id:    "wipe",
+      label: "/wipe",
+      hint:  "删除存档（10 秒内连续输入两次生效）",
+      clickable: false,
     },
     {
       id:    "research",

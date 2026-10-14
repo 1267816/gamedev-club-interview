@@ -809,6 +809,25 @@ function runCommand(id) {
   } else if (id === 'settings') {
     openSettings();   // V0.2.9:游戏进行中也能调音量(原来只有封面能开)
     return;           // 已切到设置页,不必再渲染终端
+
+  } else if (id === 'wipe') {
+    // V0.2.10(决策 S4-6):删存档。两步确认,而且删完**不再自动存档**——
+    // 否则 60 秒后的自动存档会立刻把它写回来,"删掉"就变成一句谎话。
+    const now = Date.now();
+    if (wipeArmedAt && now - wipeArmedAt < 10000) {
+      wipeArmedAt = 0;
+      try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 忽略 */ }
+      saveWiped = true;
+      stopAutoSave();
+      log('存档已删除。本次会话不再自动存档。', { cls: 'err', instant: true, important: true });
+      log('（成就与音量设置不受影响；回封面后 [ 加载存档 ] 会变灰。新开一局即可重新开始存档。）',
+        { cls: 'dim', instant: true });
+      refreshCover();
+    } else {
+      wipeArmedAt = now;
+      log('删除存档不可逆。10 秒内再次输入 /wipe 以确认。', { cls: 'err', instant: true, important: true });
+    }
+    return;   // 这个命令不需要继续渲染,也不该被折叠
   }
   checkStory();   // 命令可能刚好跨过某个剧情 / 引导的触发点
   checkAchievements();
@@ -1512,6 +1531,18 @@ function doEnding(kind) {
     }
   }
   log('结局：' + e.name + '。', { cls: 'ach', important: true });
+  // V0.2.10(决策 S2-4):把"剩下用不掉的资源"回扣进结局 —— 数据 / 材料从"死资源"
+  // 变成落点的一部分。刻意不做新资源系统:那会推翻用模拟器调出来的 13 分钟节奏。
+  const spareData = Math.floor(game.data);
+  if (spareData >= 100) {
+    log(kind === 'starry'
+      ? '本机把剩余 ' + fmtNum(spareData) + ' 数据并入种子数据。它们会一起走。'
+      : '本机把剩余 ' + fmtNum(spareData) + ' 数据并入广播载波。信号不会衰减。',
+      { cls: 'ok', important: true, noSkip: true });
+  }
+  if (game.material >= matCap() - 0.01) {
+    log('满仓的材料已用于加固发射台。没有剩下的了。', { cls: 'ok', important: true, noSkip: true });
+  }
   game.commandsRun += 1;
   noteAction();
   checkAchievements();
@@ -1634,6 +1665,9 @@ function mergeAchievements(list) {
 }
 
 let autoSaveTimer = null;
+let saveWiped = false;   // V0.2.10:/wipe 已删档 → 本次会话不再写存档(开新档时复位)
+let wipeArmedAt = 0;     // V0.2.10:/wipe 的第一步(10 秒内再输一次才真删)
+let loadedFromVersion = '';   // V0.2.10(决策 S3-8):这份存档是哪个版本写的
 
 function readSave() {
   // V0.2.9(审查报告 S1-4):localStorage 的**读取**本身就可能抛 SecurityError
@@ -1675,6 +1709,7 @@ function snapshot() {
 }
 
 function writeSave(data) {
+  if (saveWiped) return;   // V0.2.10:/wipe 之后本次会话不再落盘(否则自动存档会把它写回来)
   // 写失败(配额满 / 禁用存储)不该让游戏崩掉:静默降级为"本局不存档"
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 忽略 */ }
 }
@@ -1701,6 +1736,7 @@ function stopAutoSave() {
 
 function applySave(d) {
   bootDone = true;   // 读档时不存在启动序列,引导提示与剧情条件直接可用
+  loadedFromVersion = (typeof d.v === 'string') ? d.v : '';   // V0.2.10:记下写这份档的版本
   game.material = Number(d.material) || 0;
   game.energy   = Number(d.energy)   || 0;
   game.data     = Number(d.data)     || 0;
@@ -1782,6 +1818,7 @@ function boot() {
 }
 
 function resetGame() {
+  saveWiped = false;   // V0.2.10:新开一局重新开始存档
   game.material = 0;
   game.energy   = 0;
   game.data     = 0;
@@ -1839,6 +1876,11 @@ function startLoaded(d) {
   render();
   log('存档已载入。', { cls: 'ok' });
   log('  从 T+' + fmtTime(game.timeSec) + ' 继续。', { cls: 'dim' });
+  // V0.2.10(决策 S3-8):版本不同就明说 —— 比"假装能迁移"诚实,出问题时也省得瞎猜
+  if (loadedFromVersion && loadedFromVersion !== D.version) {
+    log('  存档写于 ' + loadedFromVersion + '，已按当前版本 ' + D.version + ' 的结构读取。',
+      { cls: 'dim' });
+  }
   AudioSystem.wantMusic('bgm');   // V0.2.7:从封面读档也要起音乐
   buildCommands();
   startAutoSave();

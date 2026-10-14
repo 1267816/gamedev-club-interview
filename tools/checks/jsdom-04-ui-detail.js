@@ -275,9 +275,9 @@ function run() {
       ti.value = '/';
       ti.dispatchEvent(new w.Event('input', { bubbles: true }));
       await sleep(60);
-      // V0.2.9:8 → 9(新增 /settings)
-      ok('输入 / 列出全部 9 条命令(含结局的 /stay /go 与 /settings)',
-        doc.querySelectorAll('#tech-palette .palette-item').length === 9,
+      // V0.2.9:8 → 9(/settings);V0.2.10:9 → 10(/wipe)
+      ok('输入 / 列出全部 10 条命令(含结局的 /stay /go、/settings、/wipe)',
+        doc.querySelectorAll('#tech-palette .palette-item').length === 10,
         String(doc.querySelectorAll('#tech-palette .palette-item').length));
       ti.value = 'xyz';
       ti.dispatchEvent(new w.Event('input', { bubbles: true }));
