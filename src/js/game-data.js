@@ -205,6 +205,14 @@ const GAME_DATA = {
       clickable: true,
     },
     {
+      // V0.2.9(音频专项复查发现):设置页原来**只能在封面打开** —— 而开局那一屏音量提示写着
+      // "音量可随时调整"。玩家在游戏里想静音就完全做不到。补一条命令(与 /save /exit 同待遇)。
+      id:    "settings",
+      label: "/settings",
+      hint:  "音量设置（音乐 / 音效）",
+      clickable: true,
+    },
+    {
       id:    "research",
       label: "/research",
       hint:  "打开科技树",

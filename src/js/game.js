@@ -805,6 +805,10 @@ function runCommand(id) {
   } else if (id === 'exit') {
     exitToCover();
     return;   // 已切回封面,不必再渲染游戏界面
+
+  } else if (id === 'settings') {
+    openSettings();   // V0.2.9:游戏进行中也能调音量(原来只有封面能开)
+    return;           // 已切到设置页,不必再渲染终端
   }
   checkStory();   // 命令可能刚好跨过某个剧情 / 引导的触发点
   checkAchievements();
@@ -2142,9 +2146,11 @@ function buildSettings() {
 }
 
 function openSettings() {
+  settingsReturnTo = currentScreen;   // V0.2.9:记住从哪来的 —— 返回时要回到原处(终端 / 科技树 / 封面)
   buildSettings();
   showScreen('settings');
 }
+let settingsReturnTo = 'cover';
 
 /* ---------- 音量提示(V0.2.7) ----------
    开始之前先占满一屏,点了 [ 进入 ] 才真正开始。
@@ -2177,8 +2183,18 @@ document.getElementById('btn-load').onclick = function () {
   document.getElementById('btn-settings').onclick = openSettings;
   document.getElementById('btn-quit').onclick = quitGame;
   document.getElementById('btn-settings-back').onclick = function () {
-    showScreen('cover');
-    refreshCover();
+    // V0.2.9:原来一律回封面 —— 现在从游戏里(/settings)进来的要回终端,从科技树进来的回科技树
+    if (settingsReturnTo === 'tech' && techVisible) {
+      showScreen('tech');
+      renderTech();
+    } else if (running) {
+      showScreen('game');
+      cmdInput.focus();
+      render();
+    } else {
+      showScreen('cover');
+      refreshCover();
+    }
   };
   document.getElementById('btn-ach-back').onclick = function () {
     showScreen('cover');

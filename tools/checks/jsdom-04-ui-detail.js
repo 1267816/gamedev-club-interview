@@ -94,8 +94,9 @@ function run() {
       ok('侧栏含「科技 0 / 14」', doc.getElementById('readout').textContent.indexOf('0 / 14') >= 0);
       ok('没有 [ /mine ] 按钮(未解锁)', !doc.getElementById('btn-mine'));
       ok('有 [ /research ] 按钮', !!doc.getElementById('btn-research'));
+      // V0.2.9:新增 [ /settings ](游戏进行中也能调音量)
       ok('命令按钮顺序', [].map.call(doc.querySelectorAll('#commands button'), (b) => b.textContent).join(' ')
-        === '[ /save ] [ /exit ] [ /research ]',
+        === '[ /save ] [ /exit ] [ /settings ] [ /research ]',
         [].map.call(doc.querySelectorAll('#commands button'), (b) => b.textContent).join(' '));
 
       console.log('\n【B. 大数缩写(直接算)】');
@@ -274,7 +275,9 @@ function run() {
       ti.value = '/';
       ti.dispatchEvent(new w.Event('input', { bubbles: true }));
       await sleep(60);
-      ok('输入 / 列出全部 8 条命令(含结局的 /stay /go)', doc.querySelectorAll('#tech-palette .palette-item').length === 8,
+      // V0.2.9:8 → 9(新增 /settings)
+      ok('输入 / 列出全部 9 条命令(含结局的 /stay /go 与 /settings)',
+        doc.querySelectorAll('#tech-palette .palette-item').length === 9,
         String(doc.querySelectorAll('#tech-palette .palette-item').length));
       ti.value = 'xyz';
       ti.dispatchEvent(new w.Event('input', { bubbles: true }));
