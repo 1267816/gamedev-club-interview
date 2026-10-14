@@ -26,7 +26,9 @@ const ok = function (label, cond, extra) {
   if (cond) { pass++; console.log('  ✓ ' + label + (extra ? '  → ' + extra : '')); }
   else { fail++; console.log('  ✗ ' + label + (extra ? '  → ' + extra : '')); }
 };
-// 带一份"旧存档"(里面有 9 个成就)启动,用来验证成就不会被覆盖
+// 带一份"旧存档"(里面有 9 个成就)启动,用来验证成就不会被覆盖。
+// 注意:这里故意保留**旧的 id `gravekeeper`** —— V0.2.14 把结局键名改成了 `sower`,
+// 于是这份存档正好兼职验证"老 id 会被迁移、不会消失"。
 const OLD_ACH = ['first_rep', 'first_tech', 'no_more_typing', 'first_frag', 'wireless',
   'echo_tower', 'whole_earth', 'gravekeeper', 'star_wanderer'];
 const OLD_SAVE = JSON.stringify({
@@ -89,7 +91,9 @@ function run() {
       ok('点了「新游戏」之后成就还在', peek('game.achievements').length === 9, String(peek('game.achievements').length));
       ok('新档里也不会重复弹已获得的成就',
         !peek("JSON.stringify(game.achievements)").includes('VN-02') || peek('game.achievements').length === 9);
-      ok('成就写进了独立的存储键', (w.localStorage.getItem('vn-01-achievements') || '').indexOf('gravekeeper') >= 0);
+      // V0.2.15:老存档里的 gravekeeper 会被迁成 gardener 再落盘 —— 所以这里查 gardener
+      ok('成就写进了独立的存储键(旧 id 已迁移)', (w.localStorage.getItem('vn-01-achievements') || '').indexOf('gardener') >= 0,
+        w.localStorage.getItem('vn-01-achievements'));
 
       console.log('\n【2. 1000 以下要显示小数】');
       ok('12.5 → 12.5', peek('fmtNum(12.5)') === '12.5', peek('fmtNum(12.5)'));

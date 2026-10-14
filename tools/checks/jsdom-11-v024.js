@@ -109,8 +109,9 @@ function run() {
       ok('松开后退出长按', peek('longPress') === false);
 
       console.log('\n【3b. 结局是一段长文,而且打完才弹结算画面(V0.2.6)】');
-      ok('守墓人结局有长文(>= 15 行)', peek('ENDINGS.gravekeeper.lines.length') >= 15,
-        String(peek('ENDINGS.gravekeeper.lines.length')));
+      // V0.2.15:结局名最终为"园丁"(留下 + 重启种子库)
+      ok('园丁结局有长文(>= 15 行)', peek('ENDINGS.gardener.lines.length') >= 15,
+        String(peek('ENDINGS.gardener.lines.length')));
       ok('星海漫游结局有长文(>= 20 行)', peek('ENDINGS.starry.lines.length') >= 20,
         String(peek('ENDINGS.starry.lines.length')));
       ok('长文里有暖色(人类)的段落', peek('ENDINGS.starry.lines.some(function(l){return l && l.cls === "relic";})'));
@@ -123,10 +124,9 @@ function run() {
       await (async function () { for (let i = 0; i < 80; i++) { if (!hidden('ending')) return; await sleep(300); } })();
       ok('长文打完后结算画面才出现', !hidden('ending'));
       ok('终端里真的打出了长文(新行 >= 20)', lines().length - beforeEnd >= 20, String(lines().length - beforeEnd));
-      // V0.2.11:结局长文按"去 AI 味"重写过 —— 断言跟着改成新的那种写法
-      // (旧句「新：把这句读给任何一个愿意听的东西」属于"替机器抒情 + 对称收尾",已删)
-      ok('长文里能看到最后那句改写指令', lines().some((l) => l.indexOf('本机改写指令集') >= 0)
-        && lines().some((l) => l.indexOf('发送中。') >= 0),
+      // V0.2.15:星海漫游结局的收尾换成**用户原文的三条新指令** —— 断言跟着改
+      ok('长文里能看到用户写的那三条新指令', lines().some((l) => l.indexOf('已写入3条指令') >= 0)
+        && lines().some((l) => l.indexOf('向宇宙广播：你好，世界。') >= 0),
         lines().slice(-3).join(' | '));
 
       console.log('\n【7. 音频:三个素材都在,接口按音量工作】');

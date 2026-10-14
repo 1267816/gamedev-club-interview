@@ -190,19 +190,20 @@ function run() {
       type('cmd-input', '/stay');
       // V0.2.6:结局长文打完之后才弹结算画面 —— 这里等它出现,而不是死等固定秒数
       await (async function () { for (let i = 0; i < 60; i++) { if (!hidden('ending')) return; await sleep(300); } })();
-      ok('选 /stay 进入结局', peek('game.ending') === 'gravekeeper', String(peek('game.ending')));
-      ok('成就「守墓人」到手', peek('game.achievements').indexOf('gravekeeper') >= 0,
+      // V0.2.15:结局名最终定为"园丁"(id 也从 gravekeeper → sower → gardener)
+      ok('选 /stay 进入结局', peek('game.ending') === 'gardener', String(peek('game.ending')));
+      ok('成就「园丁」到手', peek('game.achievements').indexOf('gardener') >= 0,
         JSON.stringify(peek('game.achievements')));
-      ok('弹出结算画面', !hidden('ending') && doc.getElementById('end-title').textContent.indexOf('守墓人') >= 0,
+      ok('弹出结算画面', !hidden('ending') && doc.getElementById('end-title').textContent.indexOf('园丁') >= 0,
         doc.getElementById('end-title').textContent);
       ok('结算画面有 [ 回到选择时刻 ]', !btn('btn-end-choice').disabled);
       peek('writeSave(snapshot())');
-      ok('结局已写入存档', JSON.parse(w.localStorage.getItem('vn-01-save')).ending === 'gravekeeper');
+      ok('结局已写入存档', JSON.parse(w.localStorage.getItem('vn-01-save')).ending === 'gardener');
       btn('btn-end-choice').click();
       await sleep(400);
       ok('回到选择时刻:结局清空、选项按钮回来', peek('game.ending') === null && !!btn('btn-stay'));
       ok('回到选择时刻:经济账恢复', peek('game.unlocked').indexOf('comm') >= 0 && peek('game.scan') >= 74);
-      ok('成就不会被收回(方便凑全成就)', peek('game.achievements').indexOf('gravekeeper') >= 0);
+      ok('成就不会被收回(方便凑全成就)', peek('game.achievements').indexOf('gardener') >= 0);
 
       // V0.2.0:回档时"正在研究的项目"也要跟着回去 ——
       // 不然它会把立项时刻留在未来,变成一项永远研究不完的项目(见 docs/research.md 第 28.9 节)

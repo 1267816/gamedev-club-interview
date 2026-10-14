@@ -327,7 +327,7 @@ function run() {
       const got = () => peek('JSON.stringify(game.achievements)');
       ok('拿到的是可获得的那几个(3~5 个)', peek('game.achievements').length >= 3 && peek('game.achievements').length <= 5, got());
       ok('scan / 结局类成就未误触发',
-        ['first_frag', 'wireless', 'echo_tower', 'whole_earth', 'gravekeeper', 'star_wanderer']
+        ['first_frag', 'wireless', 'echo_tower', 'whole_earth', 'gardener', 'star_wanderer']   // V0.2.15:gravekeeper/sower → gardener
           .every((id) => peek('game.achievements').indexOf(id) < 0));
       doc.getElementById('btn-achievements').click();
       await sleep(150);

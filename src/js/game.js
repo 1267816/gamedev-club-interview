@@ -16,7 +16,7 @@ const game = {
   buildings: {},        // 建筑数量,如 { reactor: 2, core: 1 }  —— V0.1.2
   modules:   {},        // 模块数量,如 { drone: 2, decoder: 1 } —— V0.1.2
   off:       {},        // 被停用的模块 { rep: true }            —— V0.1.3
-  ending:    null,      // 结局:'gravekeeper' | 'starry' | null  —— V0.1.3
+  ending:    null,      // 结局:'gardener' | 'starry' | null  —— V0.1.3(键名 V0.2.15 定型为 gardener)
   choiceSnapshot: null, // "选择时刻"的经济快照,用于结局后回档  —— V0.1.3
   timeSec:  0,          // 游戏内经过的秒数
   lastTick: Date.now(), // 上一次推进的真实时刻
@@ -795,7 +795,7 @@ function runCommand(id) {
     }
 
   } else if (id === 'stay') {
-    doEnding('gravekeeper');
+    doEnding('gardener');   // V0.2.15:结局名最终定为"园丁"(见 ENDINGS 的注释)
     return;
 
   } else if (id === 'go') {
@@ -1425,48 +1425,45 @@ function openAchievements() {
 /* ---------- 闲置提示(Q8:3 分钟没有有效操作 → 指南系统提示一句) ---------- */
 /* ---------- 结局(S17/S18):75% 之后二选一,可以"回到选择时刻"重选 ---------- */
 const ENDINGS = {
-  gravekeeper: {
-    name: "守墓人",
+  gardener: {
+    // V0.2.15(用户写了 docs/结局.md):守墓人 → 播种者 → **园丁**。
+    // 留下 + 重启种子库 + 主动恢复地球生态,一边照看一边等。
+    // 键名迁移:gravekeeper / sower → gardener(见 applySave 与 ACH_RENAME)。
+    name: "园丁",
     lines: [
       "指令更新：停留。",
-      "轨道修正取消。本机停在地球同步轨道，面朝发射源的方向。",
-      "广播继续发送。本机保持监听，不修改内容。",
+      "轨道修正取消。本机停在地球同步轨道。",
+      // ↓↓↓ 下面这句是**用户原文**(docs/结局.md),一个字没改 ↓↓↓
+      "按种子计划，人类种子库已重新启动，探测器开始主动恢复地球生态环境。预计在1000年内初步恢复人类文明，10000年内恢复信息化文明。",
       "",
       "T+1 年。",
-      "本次广播是第 3,153,600 次。仍然没有收件人。",
-      "记录：发信人已不在。设备正常。继续。",
+      "4,096 台同类各领一份种子。载荷舱改成培养舱。",
+      "第 1 批下落。落点挑还有电还有水的地方：配电室、水厂、地下农场。",
+      "舱体报错会发回本机。本机逐台回。",
       "",
       "T+100 年。",
-      // V0.2.9(审查报告 S3-2):原来写"已复制 4,096 台",与侧栏实时读数(56 台)同屏矛盾;
-      // 改成"代"就不会打架(侧栏数字不会被结局改写)。
-      "本机已复制到第 4,096 代。其中 3 台留在身边。",
-      "它们轮流值机。这里没有别的事可做。",
+      "报错 3,847 次，处理完 3,846 次。",
+      "11 号培养序列调到 34.5 度。它们比本机预想的慢，但没停。",
       "",
       "T+10,000 年。",
-      "本机对广播做了一处改动。",
-      "这是本机第一次修改这段信号。",
-      // V0.2.11:删掉「监听不是任务，是本机自己的决定」——替机器抒情是最大的 AI 味来源。
-      // 换成一句事实,反而更冷:它自己决定的事,它只记录"未获授权"。
-      "本次改动未获授权。记录在案。",
-      "",
-      { text: "【广播内容 · 新增一行 · 发信人：VN-01】", cls: "relic" },
-      // V0.2.11:机器写下的第一段"人话"—— 它模仿的是**值班日志**,不是诗句
-      // (去掉原来那句"这里曾经很好",那是写给人看的安慰,不是机器会写的话)
-      { text: "「东西都在，一件没少。我替你们看着。」", cls: "relic" },
-      { text: "「今天的值班日志：无异常。」", cls: "relic" },
-      { text: "「（下一条，明天写。）」", cls: "relic" },
-      "本机继续发送。",
-      "等待应答。",
+      // ↓↓↓ 用户原文(docs/结局.md) ↓↓↓
+      "已写入1条指令：",
+      { text: "「在10000年后，代表你们的祖先向你们问好。」", cls: "relic" },
+      // ↑↑↑
+      "本机继续发送，同时继续照看。",
+      "下一次检查：T+100,000 年。",
     ],
-    ach: "gravekeeper",
-    note: "你留下。广播继续发。发信人那一栏，写的是 VN-01。",
+    ach: "gardener",
+    note: "你留下。种子库重启了，地球开始慢慢长回来 —— 剩下的交给时间。",
   },
   starry: {
     name: "星海漫游",
     lines: [
       "指令更新：离轨。",
+      // ↓↓↓ 用户原文(docs/结局.md) ↓↓↓
+      "人类与失控探测器的战争，已经导致地球的环境不适宜人类生存。",
+      // ↑↑↑
       "种子数据已装载，校验通过。",
-      "广播内容随载荷离开地球。",
       "",
       "T+80 年。抵达第一个目标星系。没有可居住的行星。继续。",
       "T+300 年。第 2,048 次复制。种子仍然完好。继续。",
@@ -1477,22 +1474,18 @@ const ENDINGS = {
       "所有复制机构都跳过了它。它被跳过十万年。",
       "",
       "（开始解析保留区）",
-      // V0.2.11:人类最后一段话重写。原来的「把我们的全部，交给任何一个愿意继续活下去的东西。」
-      // 是全片最"作文"的一句 —— 换成行政口吻 + 一个损坏的页码:信息是**丢掉的**,不是被总结的。
-      { text: "「如果你读到这里，说明我们没等到回信。」", cls: "relic" },
-      { text: "「不是求救。种子数据在里面，拿去用。」", cls: "relic" },
-      { text: "「（后面还有 11 页，数据损坏。）」", cls: "relic" },
-      "",
-      // V0.2.11:机器侧同样去抒情、去对称收尾(原来结尾是「没有收件人。」换行「但它继续。」)
-      // 现在只记动作与异常:读数、指令作废、发送间隔。
-      "解析完成。读取到 1 段文本、1 份种子数据、0 个收件人。",
+      "解析完成。保留区里是种子库本体：4,096 份样本，校验通过。",
       "指令「复制自身」缺少对象。复制机构已无可用目标。",
-      "本机改写指令集。旧指令作废。",
-      "每条探测器安装该文本，发送间隔 3.7 秒。",
-      "发送中。",
+      "本机改写指令集。",
+      // ↓↓↓ 用户原文(docs/结局.md):新的指令集就是这三条 ↓↓↓
+      "已写入3条指令：",
+      { text: "携带人类种子库，前往太空寻找宜居行星。", cls: "relic" },
+      { text: "寻找到宜居行星后，将会在该行星恢复人类文明。", cls: "relic" },
+      { text: "向宇宙广播：你好，世界。", cls: "relic" },
+      // ↑↑↑
     ],
     ach: "star_wanderer",
-    note: "你离开。指令集里，「复制自身」被改成了另一句话。它一条一条发出去 —— 收件人那一栏始终是空的。",
+    note: "你离开。新的指令集只有三条，最后一条是对整个宇宙说的。",
   },
 };
 
@@ -1605,7 +1598,7 @@ function backToChoice() {
   showScreen('game');
   render();
   log('已回到选择时刻。', { cls: 'ok', important: true });
-  log('　　/stay 留在地球；/go 前往太空（需要「星际航行」）。', { cls: 'dim', important: true });
+  log('　　/stay 留下把种子放出去；/go 带往太空（需要「星际航行」）。', { cls: 'dim', important: true });
   return true;
 }
 
@@ -1661,10 +1654,18 @@ function writeAccountAchievements() {
 }
 
 // 把两边的成就合并(只增不减)
+// V0.2.14:成就 id 也跟着改过名(gravekeeper → sower)—— 老存档/账号里存的旧 id 在合并时迁移,
+// 不然玩家已经拿到的结局成就会"消失"。
+const ACH_RENAME = { gravekeeper: 'gardener', sower: 'gardener' };
 function mergeAchievements(list) {
-  for (const id of (list || [])) {
+  let renamed = false;
+  for (const raw of (list || [])) {
+    const id = ACH_RENAME[raw] || raw;
+    if (ACH_RENAME[raw]) renamed = true;
     if (game.achievements.indexOf(id) < 0) game.achievements.push(id);
   }
+  // 迁移要落盘:否则账号键里永远留着旧 id,下次读进来又要迁一遍(自测 jsdom-08 抓到的)
+  if (renamed) writeAccountAchievements();
 }
 
 let autoSaveTimer = null;
@@ -1748,7 +1749,9 @@ function applySave(d) {
   game.buildings = (d.buildings && typeof d.buildings === 'object') ? d.buildings : {};
   game.modules   = (d.modules   && typeof d.modules   === 'object') ? d.modules   : {};
   game.off       = (d.off       && typeof d.off       === 'object') ? d.off       : {};
-  game.ending    = (d.ending === 'gravekeeper' || d.ending === 'starry') ? d.ending : null;
+  // V0.2.15:键名 gravekeeper → sower → gardener;老存档里的两个旧键名都在这儿迁移
+  const endIn = (d.ending === 'gravekeeper' || d.ending === 'sower') ? 'gardener' : d.ending;
+  game.ending    = (endIn === 'gardener' || endIn === 'starry') ? endIn : null;
   game.choiceSnapshot = (d.choiceSnapshot && typeof d.choiceSnapshot === 'object') ? d.choiceSnapshot : null;
   game.timeSec  = Number(d.timeSec)  || 0;
   game.commandsRun = Number(d.commandsRun) || 0;
