@@ -251,7 +251,7 @@ const GAME_DATA = {
     {
       id:    "stay",
       label: "/stay",
-      hint:  "留在地球，作为守墓人",
+      hint:  "留在地球，作为守墓“人”",
       clickable: false,   // 只有走到 75%「回声塔」之后才作为按钮出现
     },
     {
